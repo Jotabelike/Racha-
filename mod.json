@@ -1,0 +1,19 @@
+{
+	"geode": "4.7.0",
+	"gd": {
+		"win": "2.2074",
+		"android": "2.2074",
+		"mac": "2.2074",
+		"ios": "2.2074"
+	},
+	"id": "jotabelike.gd_racha",
+	"name": "Racha!",
+	"version": "v0.0.2-beta",
+	"developer": "Jotabelike",
+	"description": "Personal Streak! Prove you're the best and start a streak!",
+	"resources": {
+		"sprites": [
+			"resources/btnStreak.png"
+		]
+	}
+}
