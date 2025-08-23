@@ -20,20 +20,27 @@ struct StreakData {
         currentStreak = Mod::get()->getSavedValue<int>("streak", 0);
         starsToday = Mod::get()->getSavedValue<int>("starsToday", 0);
         lastDay = Mod::get()->getSavedValue<std::string>("lastDay", "");
+        dailyUpdate(); // Verificar cambio de día al cargar
     }
+
     void save() {
         Mod::get()->setSavedValue<int>("streak", currentStreak);
         Mod::get()->setSavedValue<int>("starsToday", starsToday);
         Mod::get()->setSavedValue<std::string>("lastDay", lastDay);
     }
-    void dailyUpdate() {
+
+    std::string getCurrentDate() {
         time_t t = time(nullptr);
         tm* now = localtime(&t);
         char buf[16];
         strftime(buf, sizeof(buf), "%Y-%m-%d", now);
-        std::string today = buf;
+        return std::string(buf);
+    }
+
+    void dailyUpdate() {
+        std::string today = getCurrentDate();
         if (lastDay != today) {
-            if (starsToday < 5 && lastDay != "") {
+            if (starsToday < 5 && !lastDay.empty()) {
                 currentStreak = 0;
             }
             starsToday = 0;
@@ -41,9 +48,10 @@ struct StreakData {
             save();
         }
     }
+
     void addStars(int count) {
-        load();
-        dailyUpdate();
+        load(); // Cargar datos actualizados
+        dailyUpdate(); // Verificar cambio de día
         bool alreadyGotRacha = (starsToday >= 5);
         starsToday += count;
         if (!alreadyGotRacha && starsToday >= 5) {
@@ -69,7 +77,8 @@ class $modify(MyGameStatsManager, GameStatsManager) {
 class InfoPopup : public Popup<> {
 protected:
     bool setup() override {
-        g_streakData.load();
+        g_streakData.load(); // Forzar actualización diaria al abrir el popup
+        g_streakData.dailyUpdate();
 
         this->setTitle("Current streak (Beta)");
         auto winSize = m_mainLayer->getContentSize();
@@ -82,8 +91,8 @@ protected:
         m_mainLayer->addChild(streakLabel);
 
         // ------- Barra de progreso --------
-        float barWidth = 140.0f;      // angosta
-        float barHeight = 16.0f;      // delgada
+        float barWidth = 140.0f;
+        float barHeight = 16.0f;
         float percent = std::min(g_streakData.starsToday / 5.0f, 1.0f);
 
         // Fondo de la barra gris oscuro
@@ -91,13 +100,13 @@ protected:
         barBg->setPosition({ winSize.width / 2 - barWidth / 2, winSize.height / 2 - 18 });
         m_mainLayer->addChild(barBg, 1);
 
-        // Barra de progreso degradado amarillo
+        // Barra de progreso
         auto barFg = CCLayerGradient::create({ 250, 225, 60, 255 }, { 255, 165, 0, 255 });
         barFg->setContentSize({ barWidth * percent, barHeight });
         barFg->setPosition({ winSize.width / 2 - barWidth / 2, winSize.height / 2 - 18 });
         m_mainLayer->addChild(barFg, 2);
 
-        // Bordes blanco y negro
+        // Bordes
         auto border = CCLayerColor::create({ 255,255,255,255 }, barWidth + 2, barHeight + 2);
         border->setPosition({ winSize.width / 2 - barWidth / 2 - 1, winSize.height / 2 - 19 });
         border->setZOrder(4);
@@ -136,20 +145,22 @@ class $modify(MyMenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
 
+        // Verificar cambio de día al iniciar el juego
+        g_streakData.load();
+        g_streakData.dailyUpdate();
+
         auto menu = this->getChildByID("bottom-menu");
         if (!menu) return false;
 
-        
         auto icon = CCSprite::create("btnStreak.png"_spr);
-        icon->setScale(3.0f); // tamaño (no sirve xd)
-        // Crear el botón circular vacío con tu ícono dentro
+        icon->setScale(3.0f);
+
         auto circle = CircleButtonSprite::create(
-            icon,                     
-            CircleBaseColor::Green,       // color 
-            CircleBaseSize::Medium     // tamaño 
+            icon,
+            CircleBaseColor::Green,
+            CircleBaseSize::Medium
         );
 
-       
         auto btn = CCMenuItemSpriteExtra::create(
             circle,
             this,
@@ -167,4 +178,3 @@ class $modify(MyMenuLayer, MenuLayer) {
         InfoPopup::create()->show();
     }
 };
-
