@@ -8,12 +8,21 @@
 	},
 	"id": "jotabelike.gd_racha",
 	"name": "Racha!",
-	"version": "v0.0.5-beta",
+	"version": "v0.1.2-beta",
 	"developer": "Jotabelike",
 	"description": "Personal Streak! Prove you're the best and start a streak!",
 	"resources": {
 		"sprites": [
-			"resources/btnStreak.png"
+			"resources/btnStreak.png",
+			"resources/racha1.png",
+			"resources/racha2.png",
+			"resources/racha3.png",
+			"resources/racha4.png",
+			"resources/racha5.png",
+			"resources/racha6.png",
+			"resources/racha7.png",
+			"resources/racha8.png",
+			"resources/racha9.png"
 		]
 	}
 }
