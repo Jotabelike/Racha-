@@ -1,3 +1,7 @@
+# 1.1.0
+- added streak display
+- add new streak animation!
+
 # BETA 0.1.2
 - added display of all streaks
 - streaks now have animation
