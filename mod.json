@@ -7,14 +7,23 @@
 		"ios": "2.2074"
 	},
 	"id": "jotabelike.gd_racha",
-	"name": "Racha!",
-	"version": "v1.1.0",
+	"name": "Streak!",
+	"version": "v1.1.5",
 	"developer": "Jotabelike",
 	"description": "Personal Streak! Prove you're the best and start a streak!",
+	"links": {
+		"community": "https://discord.gg/vEPWBuFEn5"
+	},
+	"tags": [
+		"offline"
+	],
 	"resources": {
 		"sprites": [
 			"resources/btnStreak.png",
 			"resources/NewStreak.png",
+			"resources/BtnStats.png",
+			"resources/reward100.png",
+			"resources/RewardsBtn.png",
 			"resources/racha0.png",
 			"resources/racha1.png",
 			"resources/racha2.png",

@@ -84,18 +84,16 @@ struct StreakData {
     void addStars(int count) {
         load();
         dailyUpdate();
-        
-        int oldStreak = currentStreak;
+
         int requiredStars = getRequiredStars();
         bool alreadyGotRacha = (starsToday >= requiredStars);
         starsToday += count;
-        
+
         if (!alreadyGotRacha && starsToday >= requiredStars) {
             currentStreak++;
-            // Marcar que hay una nueva racha para mostrar en el popup
             hasNewStreak = true;
         }
-        
+
         save();
     }
 
@@ -157,7 +155,7 @@ protected:
         auto winSize = m_mainLayer->getContentSize();
 
         float startX = 50.f;
-        float y = winSize.height / 2 + 20.f; // Ajustar posición Y un poco más arriba
+        float y = winSize.height / 2 + 20.f;
         float spacing = 50.f;
 
         // Lista de rachas con sus días y estrellas requeridas
@@ -176,22 +174,20 @@ protected:
         int i = 0;
         for (auto& [sprite, day, requiredStars] : rachas) {
             auto spr = CCSprite::create(sprite.c_str());
-            spr->setScale(0.22f); // Escala un poco más pequeña
+            spr->setScale(0.22f);
             spr->setPosition({ startX + i * spacing, y });
             m_mainLayer->addChild(spr);
 
-            // Texto del día
             auto label = CCLabelBMFont::create(
                 CCString::createWithFormat("Day %d", day)->getCString(),
                 "goldFont.fnt"
             );
-            label->setScale(0.35f); // Escala un poco más pequeña
+            label->setScale(0.35f);
             label->setPosition({ startX + i * spacing, y - 40 });
             m_mainLayer->addChild(label);
 
-            // Icono de estrella y texto de estrellas requeridas (más juntos)
             auto starIcon = CCSprite::createWithSpriteFrameName("GJ_starsIcon_001.png");
-            starIcon->setScale(0.4f); // Escala un poco más pequeña
+            starIcon->setScale(0.4f);
             starIcon->setPosition({ startX + i * spacing - 4, y - 60 });
             m_mainLayer->addChild(starIcon);
 
@@ -199,7 +195,7 @@ protected:
                 CCString::createWithFormat("%d", requiredStars)->getCString(),
                 "bigFont.fnt"
             );
-            starsLabel->setScale(0.3f); // Escala un poco más pequeña
+            starsLabel->setScale(0.3f);
             starsLabel->setPosition({ startX + i * spacing + 6, y - 60 });
             m_mainLayer->addChild(starsLabel);
 
@@ -212,7 +208,7 @@ protected:
 public:
     static AllRachasPopup* create() {
         auto ret = new AllRachasPopup();
-        if (ret && ret->initAnchored(500.f, 155.f)) { // Altura reducida de 200 a 180
+        if (ret && ret->initAnchored(500.f, 155.f)) {
             ret->autorelease();
             return ret;
         }
@@ -220,6 +216,109 @@ public:
         return nullptr;
     }
 };
+
+// ============= POPUP DE PROGRESO 1 → 100 DÍAS =============
+class DayProgressPopup : public Popup<> {
+protected:
+    bool setup() override {
+        this->setTitle("Progress to 100 Days");
+        auto winSize = m_mainLayer->getContentSize();
+
+        g_streakData.load();
+        int day = std::max(0, std::min(g_streakData.currentStreak, 100)); // clamp 0..100
+
+        // ===== Barra de progreso (mismo estilo que la barra principal) =====
+        float barWidth = 180.0f;
+        float barHeight = 16.0f;
+        float percent = day / 100.0f;
+
+        auto barBg = CCLayerColor::create({ 45, 45, 45, 255 }, barWidth, barHeight);
+        barBg->setPosition({ winSize.width / 2 - barWidth / 2, winSize.height / 2 - 10 });
+        m_mainLayer->addChild(barBg, 1);
+
+        auto barFg = CCLayerGradient::create({ 250, 225, 60, 255 }, { 255, 165, 0, 255 });
+        barFg->setContentSize({ barWidth * percent, barHeight });
+        barFg->setPosition({ winSize.width / 2 - barWidth / 2, winSize.height / 2 - 10 });
+        m_mainLayer->addChild(barFg, 2);
+
+        auto border = CCLayerColor::create({ 255,255,255,255 }, barWidth + 2, barHeight + 2);
+        border->setPosition({ winSize.width / 2 - barWidth / 2 - 1, winSize.height / 2 - 11 });
+        border->setZOrder(4);
+        border->setOpacity(120);
+        m_mainLayer->addChild(border);
+
+        auto outer = CCLayerColor::create({ 0,0,0,255 }, barWidth + 6, barHeight + 6);
+        outer->setPosition({ winSize.width / 2 - barWidth / 2 - 3, winSize.height / 2 - 13 });
+        outer->setZOrder(0);
+        outer->setOpacity(70);
+        m_mainLayer->addChild(outer);
+
+        // ===== SPRITE DE RECOMPENSA AL FINAL DE LA BARRA =====
+        auto rewardSprite = CCSprite::create("reward100.png"_spr);
+        if (rewardSprite) {
+            rewardSprite->setScale(0.2f);
+            // Posicionar al final de la barra (derecha)
+            rewardSprite->setPosition({
+                winSize.width / 2 + barWidth / 2 + 7,  // +15 para separación
+                winSize.height / 2 - 2
+                });
+            m_mainLayer->addChild(rewardSprite, 5);
+        }
+
+        // Texto "Day X / 100"
+        auto dayText = CCLabelBMFont::create(
+            CCString::createWithFormat("Day %d / 100", day)->getCString(),
+            "goldFont.fnt"
+        );
+        dayText->setScale(0.5f);
+        dayText->setPosition({ winSize.width / 2, winSize.height / 2 - 35 });
+        m_mainLayer->addChild(dayText, 5);
+
+        return true;
+    }
+
+public:
+    static DayProgressPopup* create() {
+        auto ret = new DayProgressPopup();
+        if (ret && ret->initAnchored(260.f, 140.f)) {
+            ret->autorelease();
+            return ret;
+        }
+        CC_SAFE_DELETE(ret);
+        return nullptr;
+    }
+};
+// ============= POPUP DE RECOMPENSAS =============
+class RewardsPopup : public Popup<> {
+protected:
+    bool setup() override {
+        this->setTitle("Rewards");
+        auto winSize = m_mainLayer->getContentSize();
+
+        // Aquí puedes agregar el contenido de recompensas
+        auto placeholder = CCLabelBMFont::create(
+            "Rewards System Coming Soon!",
+            "bigFont.fnt"
+        );
+        placeholder->setScale(0.5f);
+        placeholder->setPosition(winSize.width / 2, winSize.height / 2);
+        m_mainLayer->addChild(placeholder);
+
+        return true;
+    }
+
+public:
+    static RewardsPopup* create() {
+        auto ret = new RewardsPopup();
+        if (ret && ret->initAnchored(300.f, 200.f)) {
+            ret->autorelease();
+            return ret;
+        }
+        CC_SAFE_DELETE(ret);
+        return nullptr;
+    }
+};
+
 // =========== POPUP PRINCIPAL ==============
 class InfoPopup : public Popup<> {
 protected:
@@ -261,7 +360,7 @@ protected:
         streakLabel->setPosition({ winSize.width / 2, centerY - 60 });
         m_mainLayer->addChild(streakLabel);
 
-        // Barra de progreso
+        // Barra de progreso 
         float barWidth = 140.0f;
         float barHeight = 16.0f;
         int requiredStars = g_streakData.getRequiredStars();
@@ -306,20 +405,45 @@ protected:
         // INDICADOR DE RACHA AL LADO DERECHO DE LA BARRA
         std::string indicatorSpriteName;
         if (g_streakData.starsToday >= requiredStars) {
-            // Si ya completó la racha hoy, mostrar la racha actual
             indicatorSpriteName = g_streakData.getRachaSprite();
         }
         else {
-            // Si no ha completado la racha hoy, mostrar racha0.png
             indicatorSpriteName = "racha0.png"_spr;
         }
 
         auto rachaIndicator = CCSprite::create(indicatorSpriteName.c_str());
-        rachaIndicator->setScale(0.14f); // Sprite más pequeño
+        rachaIndicator->setScale(0.14f);
         rachaIndicator->setPosition({ winSize.width / 2 + barWidth / 2 + 20, centerY - 82 });
         m_mainLayer->addChild(rachaIndicator, 5);
 
-        // Botón de información
+        // ===== BOTÓN STATS (EXISTENTE) =====
+        auto statsIcon = CCSprite::create("BtnStats.png"_spr);
+        if (statsIcon) {
+            statsIcon->setScale(0.7f);
+            auto statsBtn = CCMenuItemSpriteExtra::create(
+                statsIcon, this, menu_selector(InfoPopup::onOpenStats)
+            );
+            auto statsMenu = CCMenu::create();
+            statsMenu->addChild(statsBtn);
+            statsMenu->setPosition({ winSize.width - 22, centerY }); // "al costado" del popup
+            m_mainLayer->addChild(statsMenu, 10);
+        }
+
+        // ===== NUEVO BOTÓN DE RECOMPENSAS =====
+        auto rewardsIcon = CCSprite::create("RewardsBtn.png"_spr);
+        if (rewardsIcon) {
+            rewardsIcon->setScale(0.7f);
+            auto rewardsBtn = CCMenuItemSpriteExtra::create(
+                rewardsIcon, this, menu_selector(InfoPopup::onOpenRewards)
+            );
+            auto rewardsMenu = CCMenu::create();
+            rewardsMenu->addChild(rewardsBtn);
+            // Colocamos debajo del botón de stats (22px de separación)
+            rewardsMenu->setPosition({ winSize.width - 22, centerY - 37 });
+            m_mainLayer->addChild(rewardsMenu, 10);
+        }
+
+        // Botón de información (arriba a la derecha)
         auto infoIcon = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png");
         infoIcon->setScale(0.6f);
 
@@ -340,15 +464,22 @@ protected:
         return true;
     }
 
+    void onOpenStats(CCObject*) {
+        DayProgressPopup::create()->show();
+    }
+
+    void onOpenRewards(CCObject*) {
+        RewardsPopup::create()->show();
+    }
+
     void onInfo(CCObject*) {
         FLAlertLayer::create(
-            "About Racha!",
-            "Collect 5 stars every day to increase your streak!\n"
-            "If you miss a day (less than 5 stars), your streak resets.\n\n"
+            "About Streak!",
+            "Collect 5+ stars every day to increase your streak!\n"
+            "If you miss a day (less than required), your streak resets.\n\n"
             "Icons change depending on how many days you keep your streak.",
             "OK"
         )->show();
-    
     }
 
     void onRachaClick(CCObject*) {
@@ -357,32 +488,26 @@ protected:
 
     void showStreakAnimation(int streakLevel) {
         auto winSize = this->getContentSize();
-        
-        // Crear capa para la animación dentro del popup
+
         auto animLayer = CCLayer::create();
         animLayer->setContentSize(winSize);
         animLayer->setPosition(0, 0);
-        animLayer->setZOrder(1000); // Alto z-order dentro del popup
+        animLayer->setZOrder(1000);
         this->addChild(animLayer);
-        
-        // Fondo semitransparente
+
         auto bg = CCLayerColor::create(ccc4(0, 0, 0, 180), winSize.width, winSize.height);
         bg->setPosition(0, 0);
         animLayer->addChild(bg);
-        
-        // Determinar el sprite de la racha que se desbloqueó
+
         std::string spriteName = g_streakData.getRachaSpriteForAnimation();
-        
-        // Sprite principal de la racha
+
         auto rachaSprite = CCSprite::create(spriteName.c_str());
         rachaSprite->setPosition(CCPoint(winSize.width / 2, winSize.height / 2));
         rachaSprite->setScale(0.1f);
         animLayer->addChild(rachaSprite);
-        
-        // Sprite de "New Streak" - Mantener la animación original
+
         auto newStreakSprite = CCSprite::create("NewStreak.png"_spr);
         if (!newStreakSprite) {
-            // Si no existe el sprite, crear texto como fallback
             newStreakSprite = CCSprite::create();
             auto fallbackText = CCLabelBMFont::create("New Streak!", "bigFont.fnt");
             fallbackText->setColor(ccc3(255, 255, 0));
@@ -391,31 +516,26 @@ protected:
         newStreakSprite->setPosition(CCPoint(winSize.width / 2, winSize.height / 2 + 100));
         newStreakSprite->setScale(0.1f);
         animLayer->addChild(newStreakSprite);
-        
-        // Número de días
+
         auto daysLabel = CCLabelBMFont::create(
-            CCString::createWithFormat("Day %d", streakLevel)->getCString(), 
+            CCString::createWithFormat("Day %d", streakLevel)->getCString(),
             "goldFont.fnt"
         );
         daysLabel->setPosition(CCPoint(winSize.width / 2, winSize.height / 2 - 80));
         daysLabel->setScale(0.8f);
         daysLabel->setColor(ccc3(255, 215, 0));
         animLayer->addChild(daysLabel);
-        
-        // Animación de aparición
+
         auto scaleUp = CCScaleTo::create(0.8f, 1.2f);
         auto scaleDown = CCScaleTo::create(0.3f, 1.0f);
         auto scaleSequence = CCSequence::create(scaleUp, scaleDown, nullptr);
-        
+
         auto rotate = CCRotateBy::create(1.5f, 360);
         auto easeRotate = CCEaseElasticOut::create(rotate, 0.8f);
-        
+
         auto spawn = CCSpawn::create(scaleSequence, easeRotate, nullptr);
-        
-        // Ejecutar animaciones
         rachaSprite->runAction(spawn);
-        
-        // Animación para el sprite "New Streak"
+
         newStreakSprite->runAction(
             CCSequence::create(
                 CCScaleTo::create(0.5f, 1.2f),
@@ -430,8 +550,7 @@ protected:
                 nullptr
             )
         );
-        
-        // Animación para el número de días (parpadeo)
+
         daysLabel->runAction(
             CCRepeatForever::create(
                 CCSequence::create(
@@ -441,8 +560,7 @@ protected:
                 )
             )
         );
-        
-        // Efecto de brillo
+
         for (int i = 0; i < 3; i++) {
             auto glow = CCSprite::create();
             glow->setTextureRect(CCRect(0, 0, 200, 200));
@@ -450,14 +568,14 @@ protected:
             glow->setPosition(CCPoint(winSize.width / 2, winSize.height / 2));
             glow->setScale(0.5f + i * 0.3f);
             glow->setOpacity(100 - i * 30);
-            glow->setBlendFunc(ccBlendFunc{GL_SRC_ALPHA, GL_ONE});
+            glow->setBlendFunc(ccBlendFunc{ GL_SRC_ALPHA, GL_ONE });
             animLayer->addChild(glow, -1);
-            
+
             auto glowScaleUp = CCScaleTo::create(1.0f, 0.8f + i * 0.4f);
             auto glowScaleDown = CCScaleTo::create(1.0f, 0.6f + i * 0.3f);
             auto glowFadeUp = CCFadeTo::create(1.0f, 120 - i * 30);
             auto glowFadeDown = CCFadeTo::create(1.0f, 80 - i * 20);
-            
+
             glow->runAction(
                 CCRepeatForever::create(
                     CCSequence::create(
@@ -468,13 +586,11 @@ protected:
                 )
             );
         }
-        
-        // Fade lento para desaparecer - Crear acciones separadas para cada elemento
+
         CCArray* children = animLayer->getChildren();
         for (int i = 0; i < children->count(); i++) {
             auto child = dynamic_cast<CCNode*>(children->objectAtIndex(i));
             if (child) {
-                // Crear una nueva acción de fade para cada elemento
                 auto individualFade = CCFadeOut::create(1.5f);
                 child->runAction(
                     CCSequence::create(
@@ -485,11 +601,10 @@ protected:
                 );
             }
         }
-        
-        // Quitar la animación después de un tiempo con fade lento
+
         animLayer->runAction(
             CCSequence::create(
-                CCDelayTime::create(4.5f), // 3s de animación + 1.5s de fade
+                CCDelayTime::create(4.5f),
                 CCCallFunc::create(animLayer, callfunc_selector(CCNode::removeFromParent)),
                 nullptr
             )
