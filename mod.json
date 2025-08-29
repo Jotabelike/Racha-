@@ -22,7 +22,14 @@
 			"resources/btnStreak.png",
 			"resources/NewStreak.png",
 			"resources/BtnStats.png",
+
+			"resources/reward5.png",
+			"resources/reward10.png",
+			"resources/reward30.png",
+			"resources/reward50.png",
+			"resources/reward70.png",
 			"resources/reward100.png",
+
 			"resources/RewardsBtn.png",
 			"resources/racha0.png",
 			"resources/racha1.png",

@@ -6,43 +6,49 @@
 #include <Geode/loader/Log.hpp>
 #include <ctime>
 #include <string_view>
+#include <vector>
 
 using namespace geode::prelude;
 using namespace std::literals;
+using namespace cocos2d;
 
-// ================== SISTEMA DE RACHAS ==================
+// ================== SISTEMA DE RACHAS Y RECOMPENSAS ==================
 struct StreakData {
     int currentStreak = 0;
     int starsToday = 0;
     bool hasNewStreak = false;
     std::string lastDay = "";
 
-    // Función para obtener las estrellas requeridas según la racha
-    int getRequiredStars() {
-        if (currentStreak >= 81) return 21;      // racha9.png
-        else if (currentStreak >= 71) return 19; // racha8.png
-        else if (currentStreak >= 61) return 17; // racha7.png
-        else if (currentStreak >= 51) return 15; // racha6.png
-        else if (currentStreak >= 41) return 13; // racha5.png
-        else if (currentStreak >= 31) return 11; // racha4.png
-        else if (currentStreak >= 21) return 9;  // racha3.png
-        else if (currentStreak >= 11) return 7;  // racha2.png
-        else if (currentStreak >= 1) return 5;   // racha1.png
-        else return 5;                           // racha0.png
-    }
+    // Sistema flexible de insignias - ¡Fácil de modificar!
+    struct BadgeInfo {
+        int daysRequired;
+        std::string spriteName;
+        std::string displayName;
+    };
 
-    // Función para obtener las estrellas requeridas por nivel de racha
-    int getRequiredStarsForLevel(int streakLevel) {
-        if (streakLevel >= 81) return 21;      // racha9.png
-        else if (streakLevel >= 71) return 19; // racha8.png
-        else if (streakLevel >= 61) return 17; // racha7.png
-        else if (streakLevel >= 51) return 15; // racha6.png
-        else if (streakLevel >= 41) return 13; // racha5.png
-        else if (streakLevel >= 31) return 11; // racha4.png
-        else if (streakLevel >= 21) return 9;  // racha3.png
-        else if (streakLevel >= 11) return 7;  // racha2.png
-        else if (streakLevel >= 1) return 5;   // racha1.png
-        else return 5;                         // racha0.png
+    std::vector<BadgeInfo> badges = {
+        {5, "reward5.png"_spr, "first steps"},
+        {10, "reward10.png"_spr, "Shall we continue?"},
+        {30, "reward30.png"_spr, "We're going well"},
+        {50, "reward50.png"_spr, "Half a hundred"},
+        {70, "reward70.png"_spr, "Progressing"},
+        {100, "reward100.png"_spr, "100 Days!!!"}
+        // ¡Añade más insignias aquí fácilmente!
+    };
+
+    std::vector<bool> unlockedBadges;
+
+    int getRequiredStars() {
+        if (currentStreak >= 81) return 21;
+        else if (currentStreak >= 71) return 19;
+        else if (currentStreak >= 61) return 17;
+        else if (currentStreak >= 51) return 15;
+        else if (currentStreak >= 41) return 13;
+        else if (currentStreak >= 31) return 11;
+        else if (currentStreak >= 21) return 9;
+        else if (currentStreak >= 11) return 7;
+        else if (currentStreak >= 1) return 5;
+        else return 5;
     }
 
     void load() {
@@ -50,7 +56,18 @@ struct StreakData {
         starsToday = Mod::get()->getSavedValue<int>("starsToday", 0);
         hasNewStreak = Mod::get()->getSavedValue<bool>("hasNewStreak", false);
         lastDay = Mod::get()->getSavedValue<std::string>("lastDay", "");
+
+        // Cargar insignias desbloqueadas automáticamente según la configuración
+        unlockedBadges.resize(badges.size(), false);
+        for (int i = 0; i < badges.size(); i++) {
+            unlockedBadges[i] = Mod::get()->getSavedValue<bool>(
+                CCString::createWithFormat("badge_%d", badges[i].daysRequired)->getCString(),
+                false
+            );
+        }
+
         dailyUpdate();
+        checkRewards(); // Verificar recompensas al cargar
     }
 
     void save() {
@@ -58,6 +75,14 @@ struct StreakData {
         Mod::get()->setSavedValue<int>("starsToday", starsToday);
         Mod::get()->setSavedValue<bool>("hasNewStreak", hasNewStreak);
         Mod::get()->setSavedValue<std::string>("lastDay", lastDay);
+
+        // Guardar insignias desbloqueadas
+        for (int i = 0; i < badges.size(); i++) {
+            Mod::get()->setSavedValue<bool>(
+                CCString::createWithFormat("badge_%d", badges[i].daysRequired)->getCString(),
+                unlockedBadges[i]
+            );
+        }
     }
 
     std::string getCurrentDate() {
@@ -81,6 +106,15 @@ struct StreakData {
         }
     }
 
+    void checkRewards() {
+        for (int i = 0; i < badges.size(); i++) {
+            if (currentStreak >= badges[i].daysRequired && !unlockedBadges[i]) {
+                unlockedBadges[i] = true;
+            }
+        }
+        save();
+    }
+
     void addStars(int count) {
         load();
         dailyUpdate();
@@ -92,6 +126,7 @@ struct StreakData {
         if (!alreadyGotRacha && starsToday >= requiredStars) {
             currentStreak++;
             hasNewStreak = true;
+            checkRewards();
         }
 
         save();
@@ -120,18 +155,10 @@ struct StreakData {
         else return "racha0.png"_spr;
     }
 
-    std::string getRachaSpriteForAnimation() {
-        int streak = currentStreak;
-        if (streak >= 81) return "racha9.png"_spr;
-        else if (streak >= 71) return "racha8.png"_spr;
-        else if (streak >= 61) return "racha7.png"_spr;
-        else if (streak >= 51) return "racha6.png"_spr;
-        else if (streak >= 41) return "racha5.png"_spr;
-        else if (streak >= 31) return "racha4.png"_spr;
-        else if (streak >= 21) return "racha3.png"_spr;
-        else if (streak >= 11) return "racha2.png"_spr;
-        else if (streak >= 1)  return "racha1.png"_spr;
-        else return "racha0.png"_spr;
+    // Función para añadir una nueva insignia fácilmente
+    void addBadge(int days, const std::string& sprite, const std::string& name) {
+        badges.push_back({ days, sprite, name });
+        unlockedBadges.push_back(false);
     }
 };
 
@@ -158,7 +185,6 @@ protected:
         float y = winSize.height / 2 + 20.f;
         float spacing = 50.f;
 
-        // Lista de rachas con sus días y estrellas requeridas
         std::vector<std::tuple<std::string, int, int>> rachas = {
             { "racha1.png"_spr, 1, 5 },
             { "racha2.png"_spr, 11, 7 },
@@ -175,7 +201,7 @@ protected:
         for (auto& [sprite, day, requiredStars] : rachas) {
             auto spr = CCSprite::create(sprite.c_str());
             spr->setScale(0.22f);
-            spr->setPosition({ startX + i * spacing, y });
+            spr->setPosition(ccp(startX + i * spacing, y));
             m_mainLayer->addChild(spr);
 
             auto label = CCLabelBMFont::create(
@@ -183,12 +209,12 @@ protected:
                 "goldFont.fnt"
             );
             label->setScale(0.35f);
-            label->setPosition({ startX + i * spacing, y - 40 });
+            label->setPosition(ccp(startX + i * spacing, y - 40));
             m_mainLayer->addChild(label);
 
             auto starIcon = CCSprite::createWithSpriteFrameName("GJ_starsIcon_001.png");
             starIcon->setScale(0.4f);
-            starIcon->setPosition({ startX + i * spacing - 4, y - 60 });
+            starIcon->setPosition(ccp(startX + i * spacing - 4, y - 60));
             m_mainLayer->addChild(starIcon);
 
             auto starsLabel = CCLabelBMFont::create(
@@ -196,7 +222,7 @@ protected:
                 "bigFont.fnt"
             );
             starsLabel->setScale(0.3f);
-            starsLabel->setPosition({ startX + i * spacing + 6, y - 60 });
+            starsLabel->setPosition(ccp(startX + i * spacing + 6, y - 60));
             m_mainLayer->addChild(starsLabel);
 
             i++;
@@ -217,70 +243,149 @@ public:
     }
 };
 
-// ============= POPUP DE PROGRESO 1 → 100 DÍAS =============
+// ============= POPUP DE PROGRESO MÚLTIPLE =============
 class DayProgressPopup : public Popup<> {
 protected:
+    int m_currentGoalIndex = 0;
+    CCLabelBMFont* m_titleLabel = nullptr;
+    CCLayerColor* m_barBg = nullptr;
+    CCLayerGradient* m_barFg = nullptr;
+    CCLayerColor* m_border = nullptr;
+    CCLayerColor* m_outer = nullptr;
+    CCSprite* m_rewardSprite = nullptr;
+    CCLabelBMFont* m_dayText = nullptr;
+
     bool setup() override {
-        this->setTitle("Progress to 100 Days");
         auto winSize = m_mainLayer->getContentSize();
 
-        g_streakData.load();
-        int day = std::max(0, std::min(g_streakData.currentStreak, 100)); // clamp 0..100
-
-        // ===== Barra de progreso (mismo estilo que la barra principal) =====
-        float barWidth = 180.0f;
-        float barHeight = 16.0f;
-        float percent = day / 100.0f;
-
-        auto barBg = CCLayerColor::create({ 45, 45, 45, 255 }, barWidth, barHeight);
-        barBg->setPosition({ winSize.width / 2 - barWidth / 2, winSize.height / 2 - 10 });
-        m_mainLayer->addChild(barBg, 1);
-
-        auto barFg = CCLayerGradient::create({ 250, 225, 60, 255 }, { 255, 165, 0, 255 });
-        barFg->setContentSize({ barWidth * percent, barHeight });
-        barFg->setPosition({ winSize.width / 2 - barWidth / 2, winSize.height / 2 - 10 });
-        m_mainLayer->addChild(barFg, 2);
-
-        auto border = CCLayerColor::create({ 255,255,255,255 }, barWidth + 2, barHeight + 2);
-        border->setPosition({ winSize.width / 2 - barWidth / 2 - 1, winSize.height / 2 - 11 });
-        border->setZOrder(4);
-        border->setOpacity(120);
-        m_mainLayer->addChild(border);
-
-        auto outer = CCLayerColor::create({ 0,0,0,255 }, barWidth + 6, barHeight + 6);
-        outer->setPosition({ winSize.width / 2 - barWidth / 2 - 3, winSize.height / 2 - 13 });
-        outer->setZOrder(0);
-        outer->setOpacity(70);
-        m_mainLayer->addChild(outer);
-
-        // ===== SPRITE DE RECOMPENSA AL FINAL DE LA BARRA =====
-        auto rewardSprite = CCSprite::create("reward100.png"_spr);
-        if (rewardSprite) {
-            rewardSprite->setScale(0.2f);
-            // Posicionar al final de la barra (derecha)
-            rewardSprite->setPosition({
-                winSize.width / 2 + barWidth / 2 + 7,  // +15 para separación
-                winSize.height / 2 - 2
-                });
-            m_mainLayer->addChild(rewardSprite, 5);
-        }
-
-        // Texto "Day X / 100"
-        auto dayText = CCLabelBMFont::create(
-            CCString::createWithFormat("Day %d / 100", day)->getCString(),
-            "goldFont.fnt"
+        // Botón izquierdo
+        auto leftArrow = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png");
+        leftArrow->setScale(0.8f);
+        auto leftBtn = CCMenuItemSpriteExtra::create(
+            leftArrow, this, menu_selector(DayProgressPopup::onPreviousGoal)
         );
-        dayText->setScale(0.5f);
-        dayText->setPosition({ winSize.width / 2, winSize.height / 2 - 35 });
-        m_mainLayer->addChild(dayText, 5);
+        leftBtn->setPosition(ccp(-winSize.width / 2 + 30, 0));
+
+        // Botón derecho
+        auto rightArrow = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png");
+        rightArrow->setScale(0.8f);
+        rightArrow->setFlipX(true);
+        auto rightBtn = CCMenuItemSpriteExtra::create(
+            rightArrow, this, menu_selector(DayProgressPopup::onNextGoal)
+        );
+        rightBtn->setPosition(ccp(winSize.width / 2 - 30, 0));
+
+        auto arrowMenu = CCMenu::create();
+        arrowMenu->addChild(leftBtn);
+        arrowMenu->addChild(rightBtn);
+        arrowMenu->setPosition(ccp(winSize.width / 2, winSize.height / 2));
+        m_mainLayer->addChild(arrowMenu);
+
+        // Crear elementos de la barra
+        m_barBg = CCLayerColor::create(ccc4(45, 45, 45, 255), 180.0f, 16.0f);
+        m_barFg = CCLayerGradient::create(ccc4(250, 225, 60, 255), ccc4(255, 165, 0, 255));
+        m_border = CCLayerColor::create(ccc4(255, 255, 255, 255), 182.0f, 18.0f);
+        m_outer = CCLayerColor::create(ccc4(0, 0, 0, 255), 186.0f, 22.0f);
+
+        m_barBg->setVisible(false);
+        m_barFg->setVisible(false);
+        m_border->setVisible(false);
+        m_outer->setVisible(false);
+
+        m_mainLayer->addChild(m_barBg, 1);
+        m_mainLayer->addChild(m_barFg, 2);
+        m_mainLayer->addChild(m_border, 4);
+        m_mainLayer->addChild(m_outer, 0);
+
+        m_titleLabel = CCLabelBMFont::create("", "goldFont.fnt");
+        m_titleLabel->setScale(0.6f);
+        m_titleLabel->setPosition(ccp(winSize.width / 2, winSize.height / 2 + 60));
+        m_mainLayer->addChild(m_titleLabel, 5);
+
+        m_dayText = CCLabelBMFont::create("", "goldFont.fnt");
+        m_dayText->setScale(0.5f);
+        m_dayText->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 35));
+        m_mainLayer->addChild(m_dayText, 5);
+
+        updateDisplay();
 
         return true;
+    }
+
+    void updateDisplay() {
+        auto winSize = m_mainLayer->getContentSize();
+        g_streakData.load();
+
+        // Usar el sistema automático de insignias
+        if (m_currentGoalIndex >= g_streakData.badges.size()) {
+            m_currentGoalIndex = 0;
+        }
+
+        auto& badge = g_streakData.badges[m_currentGoalIndex];
+        int currentDays = std::max(0, std::min(g_streakData.currentStreak, badge.daysRequired));
+        float percent = currentDays / static_cast<float>(badge.daysRequired);
+
+        m_titleLabel->setString(CCString::createWithFormat("Progress to %d Days", badge.daysRequired)->getCString());
+
+        // Barra de progreso
+        float barWidth = 180.0f;
+        float barHeight = 16.0f;
+
+        m_barBg->setContentSize(CCSize(barWidth, barHeight));
+        m_barBg->setPosition(ccp(winSize.width / 2 - barWidth / 2, winSize.height / 2 - 10));
+        m_barBg->setVisible(true);
+
+        m_barFg->setContentSize(CCSize(barWidth * percent, barHeight));
+        m_barFg->setPosition(ccp(winSize.width / 2 - barWidth / 2, winSize.height / 2 - 10));
+        m_barFg->setVisible(true);
+
+        m_border->setContentSize(CCSize(barWidth + 2, barHeight + 2));
+        m_border->setPosition(ccp(winSize.width / 2 - barWidth / 2 - 1, winSize.height / 2 - 11));
+        m_border->setVisible(true);
+        m_border->setOpacity(120);
+
+        m_outer->setContentSize(CCSize(barWidth + 6, barHeight + 6));
+        m_outer->setPosition(ccp(winSize.width / 2 - barWidth / 2 - 3, winSize.height / 2 - 13));
+        m_outer->setVisible(true);
+        m_outer->setOpacity(70);
+
+        // Eliminar sprite de recompensa anterior
+        if (m_rewardSprite) {
+            m_rewardSprite->removeFromParent();
+            m_rewardSprite = nullptr;
+        }
+
+        // Insignia centrada encima de la barra
+        m_rewardSprite = CCSprite::create(badge.spriteName.c_str());
+        if (m_rewardSprite) {
+            m_rewardSprite->setScale(0.25f);
+            m_rewardSprite->setPosition(ccp(
+                winSize.width / 2,
+                winSize.height / 2 + 25
+            ));
+            m_mainLayer->addChild(m_rewardSprite, 5);
+        }
+
+        // Texto de días
+        m_dayText->setString(
+            CCString::createWithFormat("Day %d / %d", currentDays, badge.daysRequired)->getCString()
+        );
+    }
+
+    void onNextGoal(CCObject*) {
+        m_currentGoalIndex = (m_currentGoalIndex + 1) % g_streakData.badges.size();
+        updateDisplay();
+    }
+
+    void onPreviousGoal(CCObject*) {
+        m_currentGoalIndex = (m_currentGoalIndex - 1 + g_streakData.badges.size()) % g_streakData.badges.size();
+        updateDisplay();
     }
 
 public:
     static DayProgressPopup* create() {
         auto ret = new DayProgressPopup();
-        if (ret && ret->initAnchored(260.f, 140.f)) {
+        if (ret && ret->initAnchored(300.f, 180.f)) {
             ret->autorelease();
             return ret;
         }
@@ -288,21 +393,73 @@ public:
         return nullptr;
     }
 };
-// ============= POPUP DE RECOMPENSAS =============
+
+// ============= POPUP DE RECOMPENSAS (INSIGNIAS) =============
 class RewardsPopup : public Popup<> {
 protected:
     bool setup() override {
-        this->setTitle("Rewards");
+        this->setTitle("Awards Collection");
         auto winSize = m_mainLayer->getContentSize();
 
-        // Aquí puedes agregar el contenido de recompensas
-        auto placeholder = CCLabelBMFont::create(
-            "Rewards System Coming Soon!",
+        g_streakData.load();
+
+        float startX = winSize.width / 2 - (g_streakData.badges.size() * 45.f / 2) + 22.5f;
+        float y = winSize.height / 2 + 20;
+        float spacing = 45.f;
+
+        for (int i = 0; i < g_streakData.badges.size(); i++) {
+            auto& badge = g_streakData.badges[i];
+            bool unlocked = g_streakData.unlockedBadges[i];
+
+            // Sprite de la insignia
+            auto badgeSprite = CCSprite::create(badge.spriteName.c_str());
+            if (badgeSprite) {
+                badgeSprite->setScale(0.25f);
+                badgeSprite->setPosition(ccp(startX + i * spacing, y));
+
+                if (!unlocked) {
+                    badgeSprite->setColor(ccc3(100, 100, 100));
+                }
+
+                m_mainLayer->addChild(badgeSprite);
+            }
+
+            // Texto de días requeridos
+            auto daysLabel = CCLabelBMFont::create(
+                CCString::createWithFormat("%d days", badge.daysRequired)->getCString(),
+                "goldFont.fnt"
+            );
+            daysLabel->setScale(0.3f);
+            daysLabel->setPosition(ccp(startX + i * spacing, y - 35));
+
+            if (!unlocked) {
+                daysLabel->setColor(ccc3(150, 150, 150));
+            }
+
+            m_mainLayer->addChild(daysLabel);
+
+            // Icono de candado para no desbloqueadas
+            if (!unlocked) {
+                auto lockIcon = CCSprite::createWithSpriteFrameName("GJ_lock_001.png");
+                lockIcon->setScale(0.4f);
+                lockIcon->setPosition(ccp(startX + i * spacing, y));
+                m_mainLayer->addChild(lockIcon, 5);
+            }
+        }
+
+        // Contador de insignias
+        int unlockedCount = 0;
+        for (bool unlocked : g_streakData.unlockedBadges) {
+            if (unlocked) unlockedCount++;
+        }
+
+        auto counterText = CCLabelBMFont::create(
+            CCString::createWithFormat("Unlocked: %d/%d", unlockedCount, g_streakData.badges.size())->getCString(),
             "bigFont.fnt"
         );
-        placeholder->setScale(0.5f);
-        placeholder->setPosition(winSize.width / 2, winSize.height / 2);
-        m_mainLayer->addChild(placeholder);
+        counterText->setScale(0.4f);
+        counterText->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 60));
+        m_mainLayer->addChild(counterText);
 
         return true;
     }
@@ -310,7 +467,9 @@ protected:
 public:
     static RewardsPopup* create() {
         auto ret = new RewardsPopup();
-        if (ret && ret->initAnchored(300.f, 200.f)) {
+        // Ajustar tamaño automáticamente según la cantidad de insignias
+        float width = 100.f + (g_streakData.badges.size() * 45.f);
+        if (ret && ret->initAnchored(width, 200.f)) {
             ret->autorelease();
             return ret;
         }
@@ -318,6 +477,8 @@ public:
         return nullptr;
     }
 };
+
+// ... (el resto del código se mantiene igual, InfoPopup y MyMenuLayer)
 
 // =========== POPUP PRINCIPAL ==============
 class InfoPopup : public Popup<> {
@@ -341,11 +502,11 @@ protected:
 
         auto menuRacha = CCMenu::create();
         menuRacha->addChild(rachaBtn);
-        menuRacha->setPosition({ winSize.width / 2, centerY });
+        menuRacha->setPosition(ccp(winSize.width / 2, centerY));
         m_mainLayer->addChild(menuRacha, 3);
 
         // Animación de levitación
-        auto floatUp = CCMoveBy::create(1.5f, { 0, 8 });
+        auto floatUp = CCMoveBy::create(1.5f, ccp(0, 8));
         auto floatDown = floatUp->reverse();
         auto seq = CCSequence::create(floatUp, floatDown, nullptr);
         auto repeat = CCRepeatForever::create(seq);
@@ -357,32 +518,32 @@ protected:
             "goldFont.fnt"
         );
         streakLabel->setScale(0.55f);
-        streakLabel->setPosition({ winSize.width / 2, centerY - 60 });
+        streakLabel->setPosition(ccp(winSize.width / 2, centerY - 60));
         m_mainLayer->addChild(streakLabel);
 
-        // Barra de progreso 
+        // Barra de progreso (diseño original)
         float barWidth = 140.0f;
         float barHeight = 16.0f;
         int requiredStars = g_streakData.getRequiredStars();
         float percent = std::min(g_streakData.starsToday / static_cast<float>(requiredStars), 1.0f);
 
-        auto barBg = CCLayerColor::create({ 45, 45, 45, 255 }, barWidth, barHeight);
-        barBg->setPosition({ winSize.width / 2 - barWidth / 2, centerY - 90 });
+        auto barBg = CCLayerColor::create(ccc4(45, 45, 45, 255), barWidth, barHeight);
+        barBg->setPosition(ccp(winSize.width / 2 - barWidth / 2, centerY - 90));
         m_mainLayer->addChild(barBg, 1);
 
-        auto barFg = CCLayerGradient::create({ 250, 225, 60, 255 }, { 255, 165, 0, 255 });
-        barFg->setContentSize({ barWidth * percent, barHeight });
-        barFg->setPosition({ winSize.width / 2 - barWidth / 2, centerY - 90 });
+        auto barFg = CCLayerGradient::create(ccc4(250, 225, 60, 255), ccc4(255, 165, 0, 255));
+        barFg->setContentSize(CCSize(barWidth * percent, barHeight));
+        barFg->setPosition(ccp(winSize.width / 2 - barWidth / 2, centerY - 90));
         m_mainLayer->addChild(barFg, 2);
 
-        auto border = CCLayerColor::create({ 255,255,255,255 }, barWidth + 2, barHeight + 2);
-        border->setPosition({ winSize.width / 2 - barWidth / 2 - 1, centerY - 91 });
+        auto border = CCLayerColor::create(ccc4(255, 255, 255, 255), barWidth + 2, barHeight + 2);
+        border->setPosition(ccp(winSize.width / 2 - barWidth / 2 - 1, centerY - 91));
         border->setZOrder(4);
         border->setOpacity(120);
         m_mainLayer->addChild(border);
 
-        auto outer = CCLayerColor::create({ 0,0,0,255 }, barWidth + 6, barHeight + 6);
-        outer->setPosition({ winSize.width / 2 - barWidth / 2 - 3, centerY - 93 });
+        auto outer = CCLayerColor::create(ccc4(0, 0, 0, 255), barWidth + 6, barHeight + 6);
+        outer->setPosition(ccp(winSize.width / 2 - barWidth / 2 - 3, centerY - 93));
         outer->setZOrder(0);
         outer->setOpacity(70);
         m_mainLayer->addChild(outer);
@@ -390,7 +551,7 @@ protected:
         // Icono de estrella
         auto starIcon = CCSprite::createWithSpriteFrameName("GJ_starsIcon_001.png");
         starIcon->setScale(0.45f);
-        starIcon->setPosition({ winSize.width / 2 - 25, centerY - 82 });
+        starIcon->setPosition(ccp(winSize.width / 2 - 25, centerY - 82));
         m_mainLayer->addChild(starIcon, 5);
 
         // Texto del contador de estrellas
@@ -399,10 +560,10 @@ protected:
             "bigFont.fnt"
         );
         barText->setScale(0.45f);
-        barText->setPosition({ winSize.width / 2 + 15, centerY - 82 });
+        barText->setPosition(ccp(winSize.width / 2 + 15, centerY - 82));
         m_mainLayer->addChild(barText, 5);
 
-        // INDICADOR DE RACHA AL LADO DERECHO DE LA BARRA
+        // INDICADOR DE RACHA
         std::string indicatorSpriteName;
         if (g_streakData.starsToday >= requiredStars) {
             indicatorSpriteName = g_streakData.getRachaSprite();
@@ -413,10 +574,10 @@ protected:
 
         auto rachaIndicator = CCSprite::create(indicatorSpriteName.c_str());
         rachaIndicator->setScale(0.14f);
-        rachaIndicator->setPosition({ winSize.width / 2 + barWidth / 2 + 20, centerY - 82 });
+        rachaIndicator->setPosition(ccp(winSize.width / 2 + barWidth / 2 + 20, centerY - 82));
         m_mainLayer->addChild(rachaIndicator, 5);
 
-        // ===== BOTÓN STATS (EXISTENTE) =====
+        // ===== BOTÓN STATS =====
         auto statsIcon = CCSprite::create("BtnStats.png"_spr);
         if (statsIcon) {
             statsIcon->setScale(0.7f);
@@ -425,11 +586,11 @@ protected:
             );
             auto statsMenu = CCMenu::create();
             statsMenu->addChild(statsBtn);
-            statsMenu->setPosition({ winSize.width - 22, centerY }); // "al costado" del popup
+            statsMenu->setPosition(ccp(winSize.width - 22, centerY));
             m_mainLayer->addChild(statsMenu, 10);
         }
 
-        // ===== NUEVO BOTÓN DE RECOMPENSAS =====
+        // ===== BOTÓN DE RECOMPENSAS =====
         auto rewardsIcon = CCSprite::create("RewardsBtn.png"_spr);
         if (rewardsIcon) {
             rewardsIcon->setScale(0.7f);
@@ -438,12 +599,11 @@ protected:
             );
             auto rewardsMenu = CCMenu::create();
             rewardsMenu->addChild(rewardsBtn);
-            // Colocamos debajo del botón de stats (22px de separación)
-            rewardsMenu->setPosition({ winSize.width - 22, centerY - 37 });
+            rewardsMenu->setPosition(ccp(winSize.width - 22, centerY - 37));
             m_mainLayer->addChild(rewardsMenu, 10);
         }
 
-        // Botón de información (arriba a la derecha)
+        // Botón de información
         auto infoIcon = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png");
         infoIcon->setScale(0.6f);
 
@@ -452,11 +612,11 @@ protected:
         );
 
         auto menu = CCMenu::create();
-        menu->setPosition({ winSize.width - 20, winSize.height - 20 });
+        menu->setPosition(ccp(winSize.width - 20, winSize.height - 20));
         menu->addChild(infoBtn);
         m_mainLayer->addChild(menu, 10);
 
-        // Mostrar animación si hay nueva racha
+        // Mostrar animación si hay nueva racha (sin alertas)
         if (g_streakData.shouldShowAnimation()) {
             this->showStreakAnimation(g_streakData.currentStreak);
         }
@@ -477,7 +637,8 @@ protected:
             "About Streak!",
             "Collect 5+ stars every day to increase your streak!\n"
             "If you miss a day (less than required), your streak resets.\n\n"
-            "Icons change depending on how many days you keep your streak.",
+            "Icons change depending on how many days you keep your streak.\n"
+            "Earn special awards for maintaining your streak!",
             "OK"
         )->show();
     }
@@ -499,10 +660,10 @@ protected:
         bg->setPosition(0, 0);
         animLayer->addChild(bg);
 
-        std::string spriteName = g_streakData.getRachaSpriteForAnimation();
+        std::string spriteName = g_streakData.getRachaSprite();
 
         auto rachaSprite = CCSprite::create(spriteName.c_str());
-        rachaSprite->setPosition(CCPoint(winSize.width / 2, winSize.height / 2));
+        rachaSprite->setPosition(ccp(winSize.width / 2, winSize.height / 2));
         rachaSprite->setScale(0.1f);
         animLayer->addChild(rachaSprite);
 
@@ -513,7 +674,7 @@ protected:
             fallbackText->setColor(ccc3(255, 255, 0));
             newStreakSprite->addChild(fallbackText);
         }
-        newStreakSprite->setPosition(CCPoint(winSize.width / 2, winSize.height / 2 + 100));
+        newStreakSprite->setPosition(ccp(winSize.width / 2, winSize.height / 2 + 100));
         newStreakSprite->setScale(0.1f);
         animLayer->addChild(newStreakSprite);
 
@@ -521,7 +682,7 @@ protected:
             CCString::createWithFormat("Day %d", streakLevel)->getCString(),
             "goldFont.fnt"
         );
-        daysLabel->setPosition(CCPoint(winSize.width / 2, winSize.height / 2 - 80));
+        daysLabel->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 80));
         daysLabel->setScale(0.8f);
         daysLabel->setColor(ccc3(255, 215, 0));
         animLayer->addChild(daysLabel);
@@ -565,7 +726,7 @@ protected:
             auto glow = CCSprite::create();
             glow->setTextureRect(CCRect(0, 0, 200, 200));
             glow->setColor(ccc3(255, 255, 100));
-            glow->setPosition(CCPoint(winSize.width / 2, winSize.height / 2));
+            glow->setPosition(ccp(winSize.width / 2, winSize.height / 2));
             glow->setScale(0.5f + i * 0.3f);
             glow->setOpacity(100 - i * 30);
             glow->setBlendFunc(ccBlendFunc{ GL_SRC_ALPHA, GL_ONE });
