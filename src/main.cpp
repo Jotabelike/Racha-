@@ -2,6 +2,8 @@
 #include <Geode/modify/GameStatsManager.hpp>
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/ui/Popup.hpp>
+#include <Geode/modify/PlayLayer.hpp> //
+#include <Geode/binding/GameManager.hpp> //
 #include <Geode/binding/CCMenuItemSpriteExtra.hpp>
 #include <Geode/loader/Log.hpp>
 #include <ctime>
@@ -19,21 +21,34 @@ struct StreakData {
     bool hasNewStreak = false;
     std::string lastDay = "";
 
-    // Sistema flexible de insignias - ¡Fácil de modificar!
+    // Definir categorías de insignias
+    enum class BadgeCategory {
+        COMMON,
+        SPECIAL,
+        EPIC,
+        LEGENDARY,
+        MYTHIC
+    };
+
+    // Sistema flexible de insignias con categorías
     struct BadgeInfo {
         int daysRequired;
         std::string spriteName;
         std::string displayName;
+        BadgeCategory category;
     };
 
     std::vector<BadgeInfo> badges = {
-        {5, "reward5.png"_spr, "first steps"},
-        {10, "reward10.png"_spr, "Shall we continue?"},
-        {30, "reward30.png"_spr, "We're going well"},
-        {50, "reward50.png"_spr, "Half a hundred"},
-        {70, "reward70.png"_spr, "Progressing"},
-        {100, "reward100.png"_spr, "100 Days!!!"}
-        // ¡Añade más insignias aquí fácilmente!
+        {5, "reward5.png"_spr, "first steps", BadgeCategory::COMMON},
+        {10, "reward10.png"_spr, "Shall we continue?", BadgeCategory::COMMON},
+        {30, "reward30.png"_spr, "We're going well", BadgeCategory::SPECIAL},
+        {50, "reward50.png"_spr, "Half a hundred", BadgeCategory::SPECIAL},
+        {70, "reward70.png"_spr, "Progressing", BadgeCategory::EPIC},
+        {100, "reward100.png"_spr, "100 Days!!!", BadgeCategory::LEGENDARY},
+        {150, "reward150.png"_spr, "150 Days!!!", BadgeCategory::LEGENDARY},
+        {300, "reward300.png"_spr, "300 Days!!!", BadgeCategory::LEGENDARY},
+        {365, "reward1year.png"_spr, "1 year!!!", BadgeCategory::MYTHIC}
+        // Puedes añadir más insignias con diferentes categorías
     };
 
     std::vector<bool> unlockedBadges;
@@ -119,13 +134,27 @@ struct StreakData {
         load();
         dailyUpdate();
 
-        int requiredStars = getRequiredStars();
-        bool alreadyGotRacha = (starsToday >= requiredStars);
+        // Obtener los requisitos ANTES de cualquier cambio
+        int currentRequired = getRequiredStars();
+        bool alreadyGotRacha = (starsToday >= currentRequired);
         starsToday += count;
 
-        if (!alreadyGotRacha && starsToday >= requiredStars) {
+        if (!alreadyGotRacha && starsToday >= currentRequired) {
+            // Guardar el requerimiento actual antes de incrementar
+            int oldRequired = currentRequired;
+
             currentStreak++;
             hasNewStreak = true;
+
+            // Obtener el NUEVO requerimiento después de incrementar la racha
+            int newRequired = getRequiredStars();
+
+            // Si los requisitos aumentan (cambio de categoría de racha)
+            if (newRequired > oldRequired) {
+                // Mantener el progreso del día anterior completado
+                starsToday = oldRequired;
+            }
+
             checkRewards();
         }
 
@@ -155,10 +184,34 @@ struct StreakData {
         else return "racha0.png"_spr;
     }
 
-    // Función para añadir una nueva insignia fácilmente
-    void addBadge(int days, const std::string& sprite, const std::string& name) {
-        badges.push_back({ days, sprite, name });
+    // Función para añadir una nueva insignia fácilmente con categoría
+    void addBadge(int days, const std::string& sprite, const std::string& name, BadgeCategory category) {
+        badges.push_back({ days, sprite, name, category });
         unlockedBadges.push_back(false);
+    }
+
+    // Función para obtener el nombre de la categoría
+    std::string getCategoryName(BadgeCategory category) {
+        switch (category) {
+        case BadgeCategory::COMMON: return "Common";
+        case BadgeCategory::SPECIAL: return "Special";
+        case BadgeCategory::EPIC: return "Epic";
+        case BadgeCategory::LEGENDARY: return "Legendary";
+        case BadgeCategory::MYTHIC: return "Mythic";
+        default: return "Unknown";
+        }
+    }
+
+    // Función para obtener el color de la categoría
+    ccColor3B getCategoryColor(BadgeCategory category) {
+        switch (category) {
+        case BadgeCategory::COMMON: return ccc3(200, 200, 200); // Gris
+        case BadgeCategory::SPECIAL: return ccc3(100, 200, 255); // Azul claro
+        case BadgeCategory::EPIC: return ccc3(170, 0, 255); // Púrpura
+        case BadgeCategory::LEGENDARY: return ccc3(255, 165, 0); // Naranja
+        case BadgeCategory::MYTHIC: return ccc3(255, 50, 50); // Rojo
+        default: return ccc3(255, 255, 255);
+        }
     }
 };
 
@@ -361,7 +414,7 @@ protected:
             m_rewardSprite->setScale(0.25f);
             m_rewardSprite->setPosition(ccp(
                 winSize.width / 2,
-                winSize.height / 2 + 25
+                winSize.height / 2 + 30
             ));
             m_mainLayer->addChild(m_rewardSprite, 5);
         }
@@ -394,22 +447,173 @@ public:
     }
 };
 
-// ============= POPUP DE RECOMPENSAS (INSIGNIAS) =============
+
+// ============= POPUP DE RECOMPENSAS (INSIGNIAS) CON CATEGORÍAS =============
 class RewardsPopup : public Popup<> {
 protected:
+    int m_currentCategory = 0;
+    CCLabelBMFont* m_categoryLabel = nullptr;
+    CCLayerColor* m_darkPanel = nullptr;
+    CCNode* m_badgeContainer = nullptr;
+    int m_colorIndex = 0;
+    float m_colorTransitionTime = 0.0f;
+    std::vector<ccColor3B> m_mythicColors;
+    ccColor3B m_currentColor;
+    ccColor3B m_targetColor;
+
     bool setup() override {
         this->setTitle("Awards Collection");
         auto winSize = m_mainLayer->getContentSize();
 
         g_streakData.load();
 
-        float startX = winSize.width / 2 - (g_streakData.badges.size() * 45.f / 2) + 22.5f;
+        // Inicializar colores para Mythic
+        m_mythicColors = {
+            ccc3(255, 0, 0),      // Rojo
+            ccc3(255, 165, 0),    // Naranja
+            ccc3(255, 255, 0),    // Amarillo
+            ccc3(0, 255, 0),      // Verde
+            ccc3(0, 0, 255),      // Azul
+            ccc3(75, 0, 130),     // Índigo
+            ccc3(238, 130, 238),  // Violeta
+            ccc3(255, 105, 180),  // Rosa
+            ccc3(255, 215, 0),    // Oro
+            ccc3(192, 192, 192)   // Plata
+        };
+        m_colorIndex = 0;
+        m_currentColor = m_mythicColors[0];
+        m_targetColor = m_mythicColors[1];
+        m_colorTransitionTime = 0.0f;
+
+        // Crear panel oscuro para mejor contraste
+        m_darkPanel = CCLayerColor::create(ccc4(30, 30, 30, 200), winSize.width - 40, 140);
+        m_darkPanel->setPosition(ccp(20, winSize.height / 2 - 50));
+        m_darkPanel->setZOrder(-1);
+        m_mainLayer->addChild(m_darkPanel);
+
+        // Botón izquierdo
+        auto leftArrow = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png");
+        leftArrow->setScale(0.8f);
+        auto leftBtn = CCMenuItemSpriteExtra::create(
+            leftArrow, this, menu_selector(RewardsPopup::onPreviousCategory)
+        );
+        leftBtn->setPosition(ccp(-winSize.width / 2 + 30, 60));
+
+        // Botón derecho
+        auto rightArrow = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png");
+        rightArrow->setScale(0.8f);
+        rightArrow->setFlipX(true);
+        auto rightBtn = CCMenuItemSpriteExtra::create(
+            rightArrow, this, menu_selector(RewardsPopup::onNextCategory)
+        );
+        rightBtn->setPosition(ccp(winSize.width / 2 - 30, 60));
+
+        auto arrowMenu = CCMenu::create();
+        arrowMenu->addChild(leftBtn);
+        arrowMenu->addChild(rightBtn);
+        arrowMenu->setPosition(ccp(winSize.width / 2, winSize.height / 2));
+        m_mainLayer->addChild(arrowMenu);
+
+        // Etiqueta de categoría
+        m_categoryLabel = CCLabelBMFont::create("", "goldFont.fnt");
+        m_categoryLabel->setScale(0.6f);
+        m_categoryLabel->setPosition(ccp(winSize.width / 2, winSize.height / 2 + 60));
+        m_mainLayer->addChild(m_categoryLabel);
+
+        // Contenedor para insignias
+        m_badgeContainer = CCNode::create();
+        m_badgeContainer->setPosition(0, 0);
+        m_mainLayer->addChild(m_badgeContainer);
+
+        // Mostrar la categoría actual
+        updateCategoryDisplay();
+
+        // Programar actualización de colores
+        this->schedule(schedule_selector(RewardsPopup::updateColorEffect), 0.016f); // ~60 FPS
+
+        return true;
+    }
+
+    void updateColorEffect(float dt) {
+        StreakData::BadgeCategory currentCat = static_cast<StreakData::BadgeCategory>(m_currentCategory);
+
+        if (currentCat == StreakData::BadgeCategory::MYTHIC && m_categoryLabel) {
+            m_colorTransitionTime += dt;
+
+            // Transición suave entre colores (3 segundos por transición)
+            float transitionDuration = 1.0f;
+
+            if (m_colorTransitionTime >= transitionDuration) {
+                m_colorTransitionTime = 0.0f;
+                m_colorIndex = (m_colorIndex + 1) % m_mythicColors.size();
+                m_currentColor = m_targetColor;
+                m_targetColor = m_mythicColors[(m_colorIndex + 1) % m_mythicColors.size()];
+            }
+
+            // Interpolación lineal entre colores
+            float progress = m_colorTransitionTime / transitionDuration;
+            ccColor3B interpolatedColor = ccc3(
+                m_currentColor.r + (m_targetColor.r - m_currentColor.r) * progress,
+                m_currentColor.g + (m_targetColor.g - m_currentColor.g) * progress,
+                m_currentColor.b + (m_targetColor.b - m_currentColor.b) * progress
+            );
+
+            m_categoryLabel->setColor(interpolatedColor);
+        }
+    }
+
+    void updateCategoryDisplay() {
+        // Limpiar contenedor de insignias
+        m_badgeContainer->removeAllChildren();
+
+        // Obtener todas las insignias de la categoría actual
+        StreakData::BadgeCategory currentCat = static_cast<StreakData::BadgeCategory>(m_currentCategory);
+        std::vector<StreakData::BadgeInfo> categoryBadges;
+
+        for (auto& badge : g_streakData.badges) {
+            if (badge.category == currentCat) {
+                categoryBadges.push_back(badge);
+            }
+        }
+
+        // Actualizar etiqueta de categoría
+        std::string categoryName = g_streakData.getCategoryName(currentCat);
+        m_categoryLabel->setString(categoryName.c_str());
+
+        // Detener cualquier animación previa y resetear escala
+        m_categoryLabel->stopAllActions();
+        m_categoryLabel->setScale(0.6f);
+
+        // Reiniciar transición de colores para Mythic
+        if (currentCat == StreakData::BadgeCategory::MYTHIC) {
+            m_colorIndex = 0;
+            m_colorTransitionTime = 0.0f;
+            m_currentColor = m_mythicColors[0];
+            m_targetColor = m_mythicColors[1];
+            m_categoryLabel->setColor(m_currentColor);
+        }
+        else {
+            // Color normal para otras categorías
+            m_categoryLabel->setColor(g_streakData.getCategoryColor(currentCat));
+        }
+
+        // Posicionar insignias
+        auto winSize = m_mainLayer->getContentSize();
+        float startX = winSize.width / 2 - (categoryBadges.size() * 45.f / 2) + 22.5f;
         float y = winSize.height / 2 + 20;
         float spacing = 45.f;
 
-        for (int i = 0; i < g_streakData.badges.size(); i++) {
-            auto& badge = g_streakData.badges[i];
-            bool unlocked = g_streakData.unlockedBadges[i];
+        for (int i = 0; i < categoryBadges.size(); i++) {
+            auto& badge = categoryBadges[i];
+            bool unlocked = false;
+
+            // Verificar si esta insignia está desbloqueada
+            for (int j = 0; j < g_streakData.badges.size(); j++) {
+                if (g_streakData.badges[j].daysRequired == badge.daysRequired) {
+                    unlocked = g_streakData.unlockedBadges[j];
+                    break;
+                }
+            }
 
             // Sprite de la insignia
             auto badgeSprite = CCSprite::create(badge.spriteName.c_str());
@@ -421,7 +625,7 @@ protected:
                     badgeSprite->setColor(ccc3(100, 100, 100));
                 }
 
-                m_mainLayer->addChild(badgeSprite);
+                m_badgeContainer->addChild(badgeSprite);
             }
 
             // Texto de días requeridos
@@ -435,50 +639,74 @@ protected:
             if (!unlocked) {
                 daysLabel->setColor(ccc3(150, 150, 150));
             }
+            else {
+                daysLabel->setColor(g_streakData.getCategoryColor(currentCat));
+            }
 
-            m_mainLayer->addChild(daysLabel);
+            m_badgeContainer->addChild(daysLabel);
 
             // Icono de candado para no desbloqueadas
             if (!unlocked) {
                 auto lockIcon = CCSprite::createWithSpriteFrameName("GJ_lock_001.png");
                 lockIcon->setScale(0.4f);
                 lockIcon->setPosition(ccp(startX + i * spacing, y));
-                m_mainLayer->addChild(lockIcon, 5);
+                m_badgeContainer->addChild(lockIcon, 5);
             }
         }
 
-        // Contador de insignias
+        // Contador de insignias para esta categoría
         int unlockedCount = 0;
-        for (bool unlocked : g_streakData.unlockedBadges) {
-            if (unlocked) unlockedCount++;
+        int totalInCategory = categoryBadges.size();
+
+        for (auto& badge : categoryBadges) {
+            for (int j = 0; j < g_streakData.badges.size(); j++) {
+                if (g_streakData.badges[j].daysRequired == badge.daysRequired &&
+                    g_streakData.unlockedBadges[j]) {
+                    unlockedCount++;
+                    break;
+                }
+            }
         }
 
         auto counterText = CCLabelBMFont::create(
-            CCString::createWithFormat("Unlocked: %d/%d", unlockedCount, g_streakData.badges.size())->getCString(),
+            CCString::createWithFormat("Unlocked: %d/%d", unlockedCount, totalInCategory)->getCString(),
             "bigFont.fnt"
         );
         counterText->setScale(0.4f);
         counterText->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 60));
-        m_mainLayer->addChild(counterText);
+        m_badgeContainer->addChild(counterText);
+    }
 
-        return true;
+    void onNextCategory(CCObject*) {
+        // Reiniciar para la nueva categoría
+        m_currentCategory = (m_currentCategory + 1) % 5;
+        updateCategoryDisplay();
+    }
+
+    void onPreviousCategory(CCObject*) {
+        // Reiniciar para la nueva categoría
+        m_currentCategory = (m_currentCategory - 1 + 5) % 5;
+        updateCategoryDisplay();
     }
 
 public:
     static RewardsPopup* create() {
         auto ret = new RewardsPopup();
-        // Ajustar tamaño automáticamente según la cantidad de insignias
-        float width = 100.f + (g_streakData.badges.size() * 45.f);
-        if (ret && ret->initAnchored(width, 200.f)) {
+        // Tamaño fijo para el popup
+        if (ret && ret->initAnchored(300.f, 200.f)) {
             ret->autorelease();
             return ret;
         }
         CC_SAFE_DELETE(ret);
         return nullptr;
     }
-};
 
-// ... (el resto del código se mantiene igual, InfoPopup y MyMenuLayer)
+    // Limpiar al cerrar el popup
+    void onClose(CCObject* sender) override {
+        this->unschedule(schedule_selector(RewardsPopup::updateColorEffect));
+        Popup::onClose(sender);
+    }
+};
 
 // =========== POPUP PRINCIPAL ==============
 class InfoPopup : public Popup<> {
@@ -799,9 +1027,29 @@ class $modify(MyMenuLayer, MenuLayer) {
         auto icon = CCSprite::create(spriteName.c_str());
         icon->setScale(0.5f);
 
+        // Crear el botón principal
         auto circle = CircleButtonSprite::create(
             icon, CircleBaseColor::Green, CircleBaseSize::Medium
         );
+
+        // Añadir exclamación si la racha está inactiva
+        int requiredStars = g_streakData.getRequiredStars();
+        bool streakInactive = (g_streakData.starsToday < requiredStars);
+
+        if (streakInactive) {
+            auto alertSprite = CCSprite::createWithSpriteFrameName("exMark_001.png");
+            if (alertSprite) {
+                alertSprite->setScale(0.4f);
+                alertSprite->setPosition(ccp(circle->getContentSize().width - 12, circle->getContentSize().height - 12));
+                alertSprite->setZOrder(10);
+                circle->addChild(alertSprite);
+
+                // Efecto de parpadeo opcional
+                auto blink = CCBlink::create(2.0f, 3);
+                auto repeat = CCRepeatForever::create(blink);
+                alertSprite->runAction(repeat);
+            }
+        }
 
         auto btn = CCMenuItemSpriteExtra::create(
             circle, this, menu_selector(MyMenuLayer::onOpenPopup)

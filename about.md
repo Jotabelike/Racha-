@@ -1,8 +1,9 @@
-# Racha! Beta
+# Racha!
 
 This mod introduces a daily star streak system.
-Collect at least 5 stars per day to increase your streak.
-If you fail to meet the daily goal, the streak resets.
-Track your consistency and challenge yourself every day!
+Earn at least 5 stars, which will increase as you unlock new streaks.
+If you don't reach the daily goal, the streak resets.
+Keep up the good work and challenge yourself daily!
+
 
 Mod By - Jotabelike
