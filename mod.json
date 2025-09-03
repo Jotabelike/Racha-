@@ -8,7 +8,7 @@
 	},
 	"id": "jotabelike.gd_racha",
 	"name": "Streak!",
-	"version": "v1.2.2",
+	"version": "v1.2.9",
 	"developer": "Jotabelike",
 	"description": "Personal Streak! Prove you're the best and start a streak!",
 	"links": {
@@ -16,6 +16,18 @@
 	},
 	"tags": [
 		"offline"
+	],
+	"dependencies": [
+		{
+			"id": "jouca.badgesapi",
+			"version": ">=v1.2.4",
+			"importance": "required"
+		},
+		{
+			"id": "geode.node-ids",
+			"version": ">=v1.21.1",
+			"importance": "required"
+		}
 	],
 	"resources": {
 		"sprites": [

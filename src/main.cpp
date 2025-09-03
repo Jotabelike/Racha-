@@ -1,10 +1,15 @@
 ﻿#include <Geode/Geode.hpp>
 #include <Geode/modify/GameStatsManager.hpp>
 #include <Geode/modify/MenuLayer.hpp>
+#include <Geode/modify/ProfilePage.hpp>
+#include <Geode/modify/CommentCell.hpp>
 #include <Geode/ui/Popup.hpp>
-#include <Geode/modify/PlayLayer.hpp> //
-#include <Geode/binding/GameManager.hpp> //
+#include <Geode/modify/PlayLayer.hpp>
+#include <Geode/binding/GameManager.hpp>
 #include <Geode/binding/CCMenuItemSpriteExtra.hpp>
+#include <Geode/binding/GJAccountManager.hpp>
+#include <Geode/binding/GJUserScore.hpp>
+#include <Geode/binding/GJComment.hpp>
 #include <Geode/loader/Log.hpp>
 #include <ctime>
 #include <string_view>
@@ -20,6 +25,7 @@ struct StreakData {
     int starsToday = 0;
     bool hasNewStreak = false;
     std::string lastDay = "";
+    std::string equippedBadge = ""; // Nueva variable para la insignia equipada
 
     // Definir categorías de insignias
     enum class BadgeCategory {
@@ -36,19 +42,19 @@ struct StreakData {
         std::string spriteName;
         std::string displayName;
         BadgeCategory category;
+        std::string badgeID; // ID único para cada insignia
     };
 
     std::vector<BadgeInfo> badges = {
-        {5, "reward5.png"_spr, "first steps", BadgeCategory::COMMON},
-        {10, "reward10.png"_spr, "Shall we continue?", BadgeCategory::COMMON},
-        {30, "reward30.png"_spr, "We're going well", BadgeCategory::SPECIAL},
-        {50, "reward50.png"_spr, "Half a hundred", BadgeCategory::SPECIAL},
-        {70, "reward70.png"_spr, "Progressing", BadgeCategory::EPIC},
-        {100, "reward100.png"_spr, "100 Days!!!", BadgeCategory::LEGENDARY},
-        {150, "reward150.png"_spr, "150 Days!!!", BadgeCategory::LEGENDARY},
-        {300, "reward300.png"_spr, "300 Days!!!", BadgeCategory::LEGENDARY},
-        {365, "reward1year.png"_spr, "1 year!!!", BadgeCategory::MYTHIC}
-        // Puedes añadir más insignias con diferentes categorías
+        {5, "reward5.png"_spr, "first steps", BadgeCategory::COMMON, "badge_5"},
+        {10, "reward10.png"_spr, "Shall we continue?", BadgeCategory::COMMON, "badge_10"},
+        {30, "reward30.png"_spr, "We're going well", BadgeCategory::SPECIAL, "badge_30"},
+        {50, "reward50.png"_spr, "Half a hundred", BadgeCategory::SPECIAL, "badge_50"},
+        {70, "reward70.png"_spr, "Progressing", BadgeCategory::EPIC, "badge_70"},
+        {100, "reward100.png"_spr, "100 Days!!!", BadgeCategory::LEGENDARY, "badge_100"},
+        {150, "reward150.png"_spr, "150 Days!!!", BadgeCategory::LEGENDARY, "badge_150"},
+        {300, "reward300.png"_spr, "300 Days!!!", BadgeCategory::LEGENDARY, "badge_300"},
+        {365, "reward1year.png"_spr, "1 year!!!", BadgeCategory::MYTHIC, "badge_365"}
     };
 
     std::vector<bool> unlockedBadges;
@@ -71,12 +77,13 @@ struct StreakData {
         starsToday = Mod::get()->getSavedValue<int>("starsToday", 0);
         hasNewStreak = Mod::get()->getSavedValue<bool>("hasNewStreak", false);
         lastDay = Mod::get()->getSavedValue<std::string>("lastDay", "");
+        equippedBadge = Mod::get()->getSavedValue<std::string>("equippedBadge", "");
 
         // Cargar insignias desbloqueadas automáticamente según la configuración
         unlockedBadges.resize(badges.size(), false);
         for (int i = 0; i < badges.size(); i++) {
             unlockedBadges[i] = Mod::get()->getSavedValue<bool>(
-                CCString::createWithFormat("badge_%d", badges[i].daysRequired)->getCString(),
+                badges[i].badgeID,
                 false
             );
         }
@@ -90,11 +97,12 @@ struct StreakData {
         Mod::get()->setSavedValue<int>("starsToday", starsToday);
         Mod::get()->setSavedValue<bool>("hasNewStreak", hasNewStreak);
         Mod::get()->setSavedValue<std::string>("lastDay", lastDay);
+        Mod::get()->setSavedValue<std::string>("equippedBadge", equippedBadge);
 
         // Guardar insignias desbloqueadas
         for (int i = 0; i < badges.size(); i++) {
             Mod::get()->setSavedValue<bool>(
-                CCString::createWithFormat("badge_%d", badges[i].daysRequired)->getCString(),
+                badges[i].badgeID,
                 unlockedBadges[i]
             );
         }
@@ -185,8 +193,8 @@ struct StreakData {
     }
 
     // Función para añadir una nueva insignia fácilmente con categoría
-    void addBadge(int days, const std::string& sprite, const std::string& name, BadgeCategory category) {
-        badges.push_back({ days, sprite, name, category });
+    void addBadge(int days, const std::string& sprite, const std::string& name, BadgeCategory category, const std::string& id) {
+        badges.push_back({ days, sprite, name, category, id });
         unlockedBadges.push_back(false);
     }
 
@@ -213,6 +221,46 @@ struct StreakData {
         default: return ccc3(255, 255, 255);
         }
     }
+
+    // Obtener información de una insignia por su ID
+    BadgeInfo* getBadgeInfo(const std::string& badgeID) {
+        for (auto& badge : badges) {
+            if (badge.badgeID == badgeID) {
+                return &badge;
+            }
+        }
+        return nullptr;
+    }
+
+    // Verificar si una insignia está desbloqueada
+    bool isBadgeUnlocked(const std::string& badgeID) {
+        for (int i = 0; i < badges.size(); i++) {
+            if (badges[i].badgeID == badgeID) {
+                return unlockedBadges[i];
+            }
+        }
+        return false;
+    }
+
+    // Equipar una insignia
+    void equipBadge(const std::string& badgeID) {
+        if (isBadgeUnlocked(badgeID)) {
+            equippedBadge = badgeID;
+            save();
+        }
+    }
+
+    // Desequipar la insignia actual
+    void unequipBadge() {
+        equippedBadge = "";
+        save();
+    }
+
+    // Obtener la insignia equipada actualmente
+    BadgeInfo* getEquippedBadge() {
+        if (equippedBadge.empty()) return nullptr;
+        return getBadgeInfo(equippedBadge);
+    }
 };
 
 StreakData g_streakData;
@@ -224,6 +272,68 @@ class $modify(MyGameStatsManager, GameStatsManager) {
             g_streakData.addStars(p1);
         }
         GameStatsManager::incrementStat(p0, p1);
+    }
+};
+
+// ============= POPUP PARA EQUIPAR INSIGNIAS =============
+class EquipBadgePopup : public Popup<std::string> {
+protected:
+    std::string m_badgeID;
+
+    bool setup(std::string badgeID) override {
+        m_badgeID = badgeID;
+        auto winSize = m_mainLayer->getContentSize();
+
+        auto badgeInfo = g_streakData.getBadgeInfo(badgeID);
+        if (!badgeInfo) return false;
+
+        this->setTitle("Equip Badge");
+
+        // Mostrar la insignia
+        auto badgeSprite = CCSprite::create(badgeInfo->spriteName.c_str());
+        if (badgeSprite) {
+            badgeSprite->setScale(0.3f);
+            badgeSprite->setPosition(ccp(winSize.width / 2, winSize.height / 2 + 20));
+            m_mainLayer->addChild(badgeSprite);
+        }
+
+        // Mostrar nombre de la insignia
+        auto nameLabel = CCLabelBMFont::create(badgeInfo->displayName.c_str(), "goldFont.fnt");
+        nameLabel->setScale(0.6f);
+        nameLabel->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 20));
+        m_mainLayer->addChild(nameLabel);
+
+        // Botón para equipar
+        auto equipBtn = CCMenuItemSpriteExtra::create(
+            ButtonSprite::create("Equip"),
+            this,
+            menu_selector(EquipBadgePopup::onEquip)
+        );
+        equipBtn->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 60));
+
+        auto menu = CCMenu::create();
+        menu->addChild(equipBtn);
+        menu->setPosition(0, 0);
+        m_mainLayer->addChild(menu);
+
+        return true;
+    }
+
+    void onEquip(CCObject*) {
+        g_streakData.equipBadge(m_badgeID);
+        FLAlertLayer::create("Success", "Badge equipped!", "OK")->show();
+        this->onClose(nullptr);
+    }
+
+public:
+    static EquipBadgePopup* create(std::string badgeID) {
+        auto ret = new EquipBadgePopup();
+        if (ret && ret->initAnchored(200.f, 150.f, badgeID)) {
+            ret->autorelease();
+            return ret;
+        }
+        CC_SAFE_DELETE(ret);
+        return nullptr;
     }
 };
 
@@ -447,7 +557,6 @@ public:
     }
 };
 
-
 // ============= POPUP DE RECOMPENSAS (INSIGNIAS) CON CATEGORÍAS =============
 class RewardsPopup : public Popup<> {
 protected:
@@ -605,15 +714,8 @@ protected:
 
         for (int i = 0; i < categoryBadges.size(); i++) {
             auto& badge = categoryBadges[i];
-            bool unlocked = false;
-
-            // Verificar si esta insignia está desbloqueada
-            for (int j = 0; j < g_streakData.badges.size(); j++) {
-                if (g_streakData.badges[j].daysRequired == badge.daysRequired) {
-                    unlocked = g_streakData.unlockedBadges[j];
-                    break;
-                }
-            }
+            bool unlocked = g_streakData.isBadgeUnlocked(badge.badgeID);
+            bool equipped = (g_streakData.getEquippedBadge() && g_streakData.getEquippedBadge()->badgeID == badge.badgeID);
 
             // Sprite de la insignia
             auto badgeSprite = CCSprite::create(badge.spriteName.c_str());
@@ -624,8 +726,34 @@ protected:
                 if (!unlocked) {
                     badgeSprite->setColor(ccc3(100, 100, 100));
                 }
+                else if (equipped) {
+                    // Resaltar insignia equipada
+                    auto glow = CCSprite::createWithSpriteFrameName("GJ_glow_01.png");
+                    glow->setScale(0.5f);
+                    glow->setPosition(ccp(badgeSprite->getContentSize().width / 2, badgeSprite->getContentSize().height / 2));
+                    glow->setColor(g_streakData.getCategoryColor(currentCat));
+                    glow->setOpacity(150);
+                    badgeSprite->addChild(glow);
+                }
 
-                m_badgeContainer->addChild(badgeSprite);
+                // Hacer la insignia clickeable si está desbloqueada
+                if (unlocked) {
+                    auto badgeBtn = CCMenuItemSpriteExtra::create(
+                        badgeSprite,
+                        this,
+                        menu_selector(RewardsPopup::onBadgeClick)
+                    );
+                    badgeBtn->setTag(i); // Guardar índice para identificarla
+                    badgeBtn->setUserObject(CCString::create(badge.badgeID));
+
+                    auto badgeMenu = CCMenu::create();
+                    badgeMenu->addChild(badgeBtn);
+                    badgeMenu->setPosition(ccp(startX + i * spacing, y));
+                    m_badgeContainer->addChild(badgeMenu);
+                }
+                else {
+                    m_badgeContainer->addChild(badgeSprite);
+                }
             }
 
             // Texto de días requeridos
@@ -659,12 +787,8 @@ protected:
         int totalInCategory = categoryBadges.size();
 
         for (auto& badge : categoryBadges) {
-            for (int j = 0; j < g_streakData.badges.size(); j++) {
-                if (g_streakData.badges[j].daysRequired == badge.daysRequired &&
-                    g_streakData.unlockedBadges[j]) {
-                    unlockedCount++;
-                    break;
-                }
+            if (g_streakData.isBadgeUnlocked(badge.badgeID)) {
+                unlockedCount++;
             }
         }
 
@@ -675,6 +799,13 @@ protected:
         counterText->setScale(0.4f);
         counterText->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 60));
         m_badgeContainer->addChild(counterText);
+    }
+    void onBadgeClick(CCObject* sender) {
+        auto menuItem = static_cast<CCMenuItemSpriteExtra*>(sender);
+        auto badgeID = static_cast<CCString*>(menuItem->getUserObject())->getCString();
+
+        // Mostrar popup para equipar la insignia
+        EquipBadgePopup::create(badgeID)->show();
     }
 
     void onNextCategory(CCObject*) {
@@ -918,12 +1049,8 @@ protected:
         auto scaleUp = CCScaleTo::create(0.8f, 1.2f);
         auto scaleDown = CCScaleTo::create(0.3f, 1.0f);
         auto scaleSequence = CCSequence::create(scaleUp, scaleDown, nullptr);
-
-        auto rotate = CCRotateBy::create(1.5f, 360);
-        auto easeRotate = CCEaseElasticOut::create(rotate, 0.8f);
-
-        auto spawn = CCSpawn::create(scaleSequence, easeRotate, nullptr);
-        rachaSprite->runAction(spawn);
+        auto repeat = CCRepeatForever::create(scaleSequence);
+        rachaSprite->runAction(repeat);
 
         newStreakSprite->runAction(
             CCSequence::create(
@@ -1064,5 +1191,99 @@ class $modify(MyMenuLayer, MenuLayer) {
 
     void onOpenPopup(CCObject*) {
         InfoPopup::create()->show();
+    }
+};
+
+// ============= MODIFICACIONES PARA MOSTRAR INSIGNIAS EN PERFIL =============
+
+class $modify(ProfilePage) {
+    struct Fields {
+        CCSprite* badgeSprite = nullptr;
+    };
+
+    void loadPageFromUserInfo(GJUserScore * a2) {
+        ProfilePage::loadPageFromUserInfo(a2);
+
+        // Solo mostrar en el perfil propio
+        if (a2->m_accountID == GJAccountManager::get()->m_accountID) {
+            auto layer = m_mainLayer;
+            CCMenu* username_menu = static_cast<CCMenu*>(layer->getChildByIDRecursive("username-menu"));
+
+            if (username_menu) {
+                // Eliminar insignia anterior si existe
+                if (m_fields->badgeSprite) {
+                    m_fields->badgeSprite->removeFromParent();
+                    m_fields->badgeSprite = nullptr;
+                }
+
+                // Obtener insignia equipada
+                auto equippedBadge = g_streakData.getEquippedBadge();
+                if (equippedBadge) {
+                    // Crear y mostrar sprite de la insignia
+                    m_fields->badgeSprite = CCSprite::create(equippedBadge->spriteName.c_str());
+                    if (m_fields->badgeSprite) {
+                        m_fields->badgeSprite->setScale(0.2f);
+                        m_fields->badgeSprite->setID("streak-badge");
+
+                        // Añadir animación de levitación
+                        auto floatUp = CCMoveBy::create(1.5f, ccp(0, 8));
+                        auto floatDown = floatUp->reverse();
+                        auto sequence = CCSequence::create(floatUp, floatDown, nullptr);
+                        auto repeat = CCRepeatForever::create(sequence);
+                        m_fields->badgeSprite->runAction(repeat);
+
+                        // Posicionar la insignia al lado del nombre de usuario
+                        username_menu->addChild(m_fields->badgeSprite);
+                        username_menu->updateLayout();
+                    }
+                }
+            }
+        }
+    }
+};
+
+class $modify(CommentCell) {
+    struct Fields {
+        CCSprite* badgeSprite = nullptr;
+    };
+
+    void loadFromComment(GJComment * p0) {
+        CommentCell::loadFromComment(p0);
+
+        // Solo mostrar en comentarios del usuario actual
+        if (p0->m_userID == GJAccountManager::get()->m_accountID) {
+            auto layer = m_mainLayer;
+            CCMenu* username_menu = static_cast<CCMenu*>(layer->getChildByIDRecursive("username-menu"));
+
+            if (username_menu) {
+                // Eliminar insignia anterior si existe
+                if (m_fields->badgeSprite) {
+                    m_fields->badgeSprite->removeFromParent();
+                    m_fields->badgeSprite = nullptr;
+                }
+
+                // Obtener insignia equipada
+                auto equippedBadge = g_streakData.getEquippedBadge();
+                if (equippedBadge) {
+                    // Crear y mostrar sprite de la insignia
+                    m_fields->badgeSprite = CCSprite::create(equippedBadge->spriteName.c_str());
+                    if (m_fields->badgeSprite) {
+                        m_fields->badgeSprite->setScale(0.15f);
+                        m_fields->badgeSprite->setID("streak-badge");
+
+                        // Añadir animación de levitación
+                        auto floatUp = CCMoveBy::create(1.5f, ccp(0, 6));
+                        auto floatDown = floatUp->reverse();
+                        auto sequence = CCSequence::create(floatUp, floatDown, nullptr);
+                        auto repeat = CCRepeatForever::create(sequence);
+                        m_fields->badgeSprite->runAction(repeat);
+
+                        // Posicionar la insignia al lado del nombre de usuario
+                        username_menu->addChild(m_fields->badgeSprite);
+                        username_menu->updateLayout();
+                    }
+                }
+            }
+        }
     }
 };
