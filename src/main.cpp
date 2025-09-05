@@ -116,15 +116,40 @@ struct StreakData {
         return std::string(buf);
     }
 
+    void unequipBadge() {
+        equippedBadge = "";
+        save();
+    }
+
+    bool isBadgeEquipped(const std::string& badgeID) {
+        return equippedBadge == badgeID;
+    }
+
+
     void dailyUpdate() {
         std::string today = getCurrentDate();
-        if (lastDay != today) {
+        if (lastDay != today && !lastDay.empty()) {
+            // Guardar el valor ANTES de resetear
+            int yesterdayStars = starsToday;
             int requiredStars = getRequiredStars();
-            if (starsToday < requiredStars && !lastDay.empty()) {
-                currentStreak = 0;
-            }
+
+            // Solo ahora resetear para el nuevo día
             starsToday = 0;
             lastDay = today;
+
+            // Verificar si no se cumplió el requerimiento del día anterior
+            if (yesterdayStars < requiredStars) {
+                currentStreak = 0;
+                // Opcional: mostrar mensaje de racha perdida
+                // FLAlertLayer::create("Streak Lost", "You didn't get enough stars yesterday!", "OK")->show();
+            }
+
+            save();
+        }
+        else if (lastDay.empty()) {
+            // Primer uso del mod
+            lastDay = today;
+            starsToday = 0;
             save();
         }
     }
@@ -250,11 +275,7 @@ struct StreakData {
         }
     }
 
-    // Desequipar la insignia actual
-    void unequipBadge() {
-        equippedBadge = "";
-        save();
-    }
+ 
 
     // Obtener la insignia equipada actualmente
     BadgeInfo* getEquippedBadge() {
@@ -275,10 +296,12 @@ class $modify(MyGameStatsManager, GameStatsManager) {
     }
 };
 
-// ============= POPUP PARA EQUIPAR INSIGNIAS =============
+// ============= POPUP PARA EQUIPAR/DESEQUIPAR INSIGNIAS =============
+
 class EquipBadgePopup : public Popup<std::string> {
 protected:
     std::string m_badgeID;
+    bool m_isCurrentlyEquipped;
 
     bool setup(std::string badgeID) override {
         m_badgeID = badgeID;
@@ -287,7 +310,11 @@ protected:
         auto badgeInfo = g_streakData.getBadgeInfo(badgeID);
         if (!badgeInfo) return false;
 
-        this->setTitle("Equip Badge");
+        // Verificar si esta insignia está actualmente equipada
+        auto equippedBadge = g_streakData.getEquippedBadge();
+        m_isCurrentlyEquipped = (equippedBadge && equippedBadge->badgeID == badgeID);
+
+        this->setTitle(m_isCurrentlyEquipped ? "Badge Equipped" : "Equip Badge");
 
         // Mostrar la insignia
         auto badgeSprite = CCSprite::create(badgeInfo->spriteName.c_str());
@@ -303,32 +330,54 @@ protected:
         nameLabel->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 20));
         m_mainLayer->addChild(nameLabel);
 
-        // Botón para equipar
-        auto equipBtn = CCMenuItemSpriteExtra::create(
-            ButtonSprite::create("Equip"),
-            this,
-            menu_selector(EquipBadgePopup::onEquip)
+        // Mostrar categoría de la insignia
+        auto categoryLabel = CCLabelBMFont::create(
+            g_streakData.getCategoryName(badgeInfo->category).c_str(),
+            "bigFont.fnt"
         );
-        equipBtn->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 60));
+        categoryLabel->setScale(0.4f);
+        categoryLabel->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 40));
+        categoryLabel->setColor(g_streakData.getCategoryColor(badgeInfo->category));
+        m_mainLayer->addChild(categoryLabel);
+
+        // Botón principal (Equipar/Desequipar)
+        auto mainBtn = CCMenuItemSpriteExtra::create(
+            ButtonSprite::create(m_isCurrentlyEquipped ? "Unequip" : "Equip"),
+            this,
+            menu_selector(EquipBadgePopup::onToggleEquip)
+        );
+        mainBtn->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 70));
+
+       
 
         auto menu = CCMenu::create();
-        menu->addChild(equipBtn);
+        menu->addChild(mainBtn);
         menu->setPosition(0, 0);
         m_mainLayer->addChild(menu);
 
         return true;
     }
 
-    void onEquip(CCObject*) {
-        g_streakData.equipBadge(m_badgeID);
-        FLAlertLayer::create("Success", "Badge equipped!", "OK")->show();
+    void onToggleEquip(CCObject*) {
+        if (m_isCurrentlyEquipped) {
+            g_streakData.unequipBadge(); // Esta función YA EXISTE en tu código
+            FLAlertLayer::create("Success", "Badge unequipped!", "OK")->show();
+        }
+        else {
+            g_streakData.equipBadge(m_badgeID);
+            FLAlertLayer::create("Success", "Badge equipped!", "OK")->show();
+        }
         this->onClose(nullptr);
+    }
+
+    void onClose(CCObject* sender) override {
+        Popup::onClose(sender);
     }
 
 public:
     static EquipBadgePopup* create(std::string badgeID) {
         auto ret = new EquipBadgePopup();
-        if (ret && ret->initAnchored(200.f, 150.f, badgeID)) {
+        if (ret && ret->initAnchored(250.f, 200.f, badgeID)) {
             ret->autorelease();
             return ret;
         }
@@ -728,9 +777,11 @@ protected:
                 }
                 else if (equipped) {
                     // Resaltar insignia equipada
-                    auto glow = CCSprite::createWithSpriteFrameName("GJ_glow_01.png");
-                    glow->setScale(0.5f);
-                    glow->setPosition(ccp(badgeSprite->getContentSize().width / 2, badgeSprite->getContentSize().height / 2));
+                    auto glow = CCSprite::createWithSpriteFrameName("GJ_completesIcon_001.png");
+                    glow->setScale(1.8f);
+                    // Restar 10 píxeles a la posición Y
+                    glow->setPosition(ccp(badgeSprite->getContentSize().width / 2,
+                        badgeSprite->getContentSize().height / 2 - 100));
                     glow->setColor(g_streakData.getCategoryColor(currentCat));
                     glow->setOpacity(150);
                     badgeSprite->addChild(glow);
@@ -800,6 +851,7 @@ protected:
         counterText->setPosition(ccp(winSize.width / 2, winSize.height / 2 - 60));
         m_badgeContainer->addChild(counterText);
     }
+
     void onBadgeClick(CCObject* sender) {
         auto menuItem = static_cast<CCMenuItemSpriteExtra*>(sender);
         auto badgeID = static_cast<CCString*>(menuItem->getUserObject())->getCString();
@@ -1198,7 +1250,7 @@ class $modify(MyMenuLayer, MenuLayer) {
 
 class $modify(ProfilePage) {
     struct Fields {
-        CCSprite* badgeSprite = nullptr;
+        CCMenuItemSpriteExtra* badgeButton = nullptr;
     };
 
     void loadPageFromUserInfo(GJUserScore * a2) {
@@ -1211,40 +1263,48 @@ class $modify(ProfilePage) {
 
             if (username_menu) {
                 // Eliminar insignia anterior si existe
-                if (m_fields->badgeSprite) {
-                    m_fields->badgeSprite->removeFromParent();
-                    m_fields->badgeSprite = nullptr;
+                if (m_fields->badgeButton) {
+                    m_fields->badgeButton->removeFromParent();
+                    m_fields->badgeButton = nullptr;
                 }
 
                 // Obtener insignia equipada
                 auto equippedBadge = g_streakData.getEquippedBadge();
                 if (equippedBadge) {
-                    // Crear y mostrar sprite de la insignia
-                    m_fields->badgeSprite = CCSprite::create(equippedBadge->spriteName.c_str());
-                    if (m_fields->badgeSprite) {
-                        m_fields->badgeSprite->setScale(0.2f);
-                        m_fields->badgeSprite->setID("streak-badge");
+                    // Crear sprite de la insignia
+                    auto badgeSprite = CCSprite::create(equippedBadge->spriteName.c_str());
+                    if (badgeSprite) {
+                        badgeSprite->setScale(0.2f);
 
-                        // Añadir animación de levitación
-                        auto floatUp = CCMoveBy::create(1.5f, ccp(0, 8));
-                        auto floatDown = floatUp->reverse();
-                        auto sequence = CCSequence::create(floatUp, floatDown, nullptr);
-                        auto repeat = CCRepeatForever::create(sequence);
-                        m_fields->badgeSprite->runAction(repeat);
+                        // Crear botón con callback usando una lambda a través de un helper
+                        m_fields->badgeButton = createClickableSprite(badgeSprite, []() {
+                            RewardsPopup::create()->show();
+                            });
+                        m_fields->badgeButton->setID("streak-badge");
 
                         // Posicionar la insignia al lado del nombre de usuario
-                        username_menu->addChild(m_fields->badgeSprite);
+                        username_menu->addChild(m_fields->badgeButton);
                         username_menu->updateLayout();
                     }
                 }
             }
         }
     }
+
+private:
+    // Función helper para crear botones clickeables
+    CCMenuItemSpriteExtra* createClickableSprite(CCSprite * sprite, std::function<void()> callback) {
+        auto button = CCMenuItemSpriteExtra::create(sprite, nullptr, nullptr);
+
+        // Hacer el sprite interactivo manualmente
+        sprite->setUserObject(CCNode::create());
+        return button;
+    }
 };
 
 class $modify(CommentCell) {
     struct Fields {
-        CCSprite* badgeSprite = nullptr;
+        CCMenuItemSpriteExtra* badgeButton = nullptr;
     };
 
     void loadFromComment(GJComment * p0) {
@@ -1257,33 +1317,41 @@ class $modify(CommentCell) {
 
             if (username_menu) {
                 // Eliminar insignia anterior si existe
-                if (m_fields->badgeSprite) {
-                    m_fields->badgeSprite->removeFromParent();
-                    m_fields->badgeSprite = nullptr;
+                if (m_fields->badgeButton) {
+                    m_fields->badgeButton->removeFromParent();
+                    m_fields->badgeButton = nullptr;
                 }
 
                 // Obtener insignia equipada
                 auto equippedBadge = g_streakData.getEquippedBadge();
                 if (equippedBadge) {
-                    // Crear y mostrar sprite de la insignia
-                    m_fields->badgeSprite = CCSprite::create(equippedBadge->spriteName.c_str());
-                    if (m_fields->badgeSprite) {
-                        m_fields->badgeSprite->setScale(0.15f);
-                        m_fields->badgeSprite->setID("streak-badge");
+                    // Crear sprite de la insignia
+                    auto badgeSprite = CCSprite::create(equippedBadge->spriteName.c_str());
+                    if (badgeSprite) {
+                        badgeSprite->setScale(0.15f);
 
-                        // Añadir animación de levitación
-                        auto floatUp = CCMoveBy::create(1.5f, ccp(0, 6));
-                        auto floatDown = floatUp->reverse();
-                        auto sequence = CCSequence::create(floatUp, floatDown, nullptr);
-                        auto repeat = CCRepeatForever::create(sequence);
-                        m_fields->badgeSprite->runAction(repeat);
+                        // Crear botón con callback usando una lambda a través de un helper
+                        m_fields->badgeButton = createClickableSprite(badgeSprite, []() {
+                            RewardsPopup::create()->show();
+                            });
+                        m_fields->badgeButton->setID("streak-badge");
 
                         // Posicionar la insignia al lado del nombre de usuario
-                        username_menu->addChild(m_fields->badgeSprite);
+                        username_menu->addChild(m_fields->badgeButton);
                         username_menu->updateLayout();
                     }
                 }
             }
         }
+    }
+
+private:
+    // Función helper para crear botones clickeables
+    CCMenuItemSpriteExtra* createClickableSprite(CCSprite * sprite, std::function<void()> callback) {
+        auto button = CCMenuItemSpriteExtra::create(sprite, nullptr, nullptr);
+
+        // Hacer el sprite interactivo manualmente
+        sprite->setUserObject(CCNode::create());
+        return button;
     }
 };

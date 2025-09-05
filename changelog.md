@@ -1,3 +1,9 @@
+# 1.3.4 Fix bugs
+- Bugs Fixes
+- update Streak animation
+- New Badges
+- New equip badge (No oline mode for now)
+
 # 1.2.2
 - More Badges!!
 - More Missions
