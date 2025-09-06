@@ -1,3 +1,7 @@
+# 1.4.2 BETA
+- Fix Bugs
+- This version is going to have many changes so a new beta will be activated.
+
 # 1.3.4 Fix bugs
 - Bugs Fixes
 - update Streak animation

@@ -1193,6 +1193,10 @@ public:
 
 // ============ BOTÓN EN MENÚ PRINCIPAL ==================
 class $modify(MyMenuLayer, MenuLayer) {
+    struct Fields {
+        CCSprite* m_alertSprite = nullptr;
+    };
+
     bool init() {
         if (!MenuLayer::init()) return false;
 
@@ -1211,29 +1215,25 @@ class $modify(MyMenuLayer, MenuLayer) {
             icon, CircleBaseColor::Green, CircleBaseSize::Medium
         );
 
-        // Añadir exclamación si la racha está inactiva
         int requiredStars = g_streakData.getRequiredStars();
         bool streakInactive = (g_streakData.starsToday < requiredStars);
 
-        if (streakInactive) {
-            auto alertSprite = CCSprite::createWithSpriteFrameName("exMark_001.png");
-            if (alertSprite) {
-                alertSprite->setScale(0.4f);
-                alertSprite->setPosition(ccp(circle->getContentSize().width - 12, circle->getContentSize().height - 12));
-                alertSprite->setZOrder(10);
-                circle->addChild(alertSprite);
+        m_fields->m_alertSprite = CCSprite::createWithSpriteFrameName("exMark_001.png");
+        m_fields->m_alertSprite->setScale(0.4f);
+        m_fields->m_alertSprite->setPosition(ccp(circle->getContentSize().width - 12, circle->getContentSize().height - 12));
+        m_fields->m_alertSprite->setZOrder(10);
+        m_fields->m_alertSprite->setVisible(streakInactive);
+        circle->addChild(m_fields->m_alertSprite);
 
-                // Efecto de parpadeo opcional
-                auto blink = CCBlink::create(2.0f, 3);
-                auto repeat = CCRepeatForever::create(blink);
-                alertSprite->runAction(repeat);
-            }
+        if (streakInactive) {
+            auto blink = CCBlink::create(2.0f, 3);
+            auto repeat = CCRepeatForever::create(blink);
+            m_fields->m_alertSprite->runAction(repeat);
         }
 
         auto btn = CCMenuItemSpriteExtra::create(
             circle, this, menu_selector(MyMenuLayer::onOpenPopup)
         );
-
         btn->setPositionY(btn->getPositionY() + 5);
         menu->addChild(btn);
         menu->updateLayout();
@@ -1241,8 +1241,28 @@ class $modify(MyMenuLayer, MenuLayer) {
         return true;
     }
 
+    void updateStreakAlert() {
+        if (!m_fields->m_alertSprite) return;
+        g_streakData.load();
+        g_streakData.dailyUpdate();
+        int requiredStars = g_streakData.getRequiredStars();
+        bool streakInactive = (g_streakData.starsToday < requiredStars);
+
+        m_fields->m_alertSprite->setVisible(streakInactive);
+
+        if (streakInactive && m_fields->m_alertSprite->numberOfRunningActions() == 0) {
+            auto blink = CCBlink::create(2.0f, 3);
+            auto repeat = CCRepeatForever::create(blink);
+            m_fields->m_alertSprite->runAction(repeat);
+        }
+        else if (!streakInactive) {
+            m_fields->m_alertSprite->stopAllActions();
+        }
+    }
+
     void onOpenPopup(CCObject*) {
         InfoPopup::create()->show();
+        this->updateStreakAlert();
     }
 };
 
